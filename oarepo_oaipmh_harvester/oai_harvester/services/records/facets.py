@@ -3,6 +3,8 @@
 from invenio_records_resources.services.records.facets import TermsFacet
 from oarepo_runtime.i18n import lazy_gettext as _
 
+code = TermsFacet(field="code", label=_("code.label"))
+
 batch_size = TermsFacet(field="batch_size", label=_("batch_size.label"))
 
 harvest_managers_id = TermsFacet(
