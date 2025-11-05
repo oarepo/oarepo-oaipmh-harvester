@@ -9,6 +9,7 @@ class OaiHarvesterSearchOptions(SearchOptions):
     facet_groups = {}
 
     facets = {
+        "code": facets.code,
         "batch_size": facets.batch_size,
         "harvest_managers_id": facets.harvest_managers_id,
         "harvest_managers_email": facets.harvest_managers_email,

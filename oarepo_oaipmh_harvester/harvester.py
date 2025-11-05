@@ -56,10 +56,13 @@ def harvest(
                 params={"facets": {"code": [harvester_or_code]}},
             )
         )
-        if hasattr(harvesters[0], "data"):
-            harvester = harvesters[0].data
+        if not harvesters:
+            harvester = harvester_service.read(system_identity, harvester_or_code).data
         else:
-            harvester = harvesters[0]
+            if hasattr(harvesters[0], "data"):
+                harvester = harvesters[0].data
+            else:
+                harvester = harvesters[0]
     else:
         harvester = harvester_or_code
     harvester = dict(harvester)
