@@ -38,6 +38,36 @@ def _get_latest_oai_datestamp(harvester_id):
     return max_datestamp
 
 
+class HarvesterCallback(StatsKeepingDataStreamCallback):
+    def __init__(self, harvester, *args, **kwargs):
+        self.harvester = harvester
+        super().__init__(*args, **kwargs)
+
+    def reader_error(self, reader, exception):
+        logger.exception(
+            "Reader error: harvester %s, error %s", self.harvester["id"], exception
+        )
+        super().reader_error(reader, exception)
+
+    def transformer_error(self, batch, transformer, exception):
+        logger.exception(
+            "Transformer error: harvester %s, transformer %s, error %s",
+            self.harvester["id"],
+            transformer,
+            exception,
+        )
+        super().transformer_error(batch, transformer, exception)
+
+    def writer_error(self, batch, writer, exception):
+        logger.exception(
+            "Writer error: harvester %s, writer %s, error %s",
+            self.harvester["id"],
+            writer,
+            exception,
+        )
+        super().writer_error(batch, writer, exception)
+
+
 def harvest(
     harvester_or_code: Union[str, OaiHarvesterRecord, Dict],
     all_records=False,
@@ -190,7 +220,7 @@ def harvest(
     if not on_background:
         datastream_impl = partial(
             SynchronousDataStream,
-            callback=callback or StatsKeepingDataStreamCallback(log_error_entry=True),
+            callback=callback or HarvesterCallback(harvester, log_error_entry=True),
         )
     else:
         datastream_impl = partial(
@@ -218,8 +248,8 @@ def harvest(
         status = "finished"
     except Exception:
         status = "failed"
+        logger.exception("Harvesting run %s failed", str_run_id)
         traceback.print_exc()
-        pass
 
     if not on_background:
         # commit whatever was left uncommitted
@@ -228,11 +258,14 @@ def harvest(
         except Exception:
             # rollback if commit fails
             # this is needed to avoid the session being in a bad state
+            logger.exception("Committing run %s failed", str_run_id)
             status = "failed"
             try:
                 db.session.rollback()
             except Exception:
-                pass
+                logger.exception(
+                    "Rollback in error recovery of run %s failed", str_run_id
+                )
 
         run = OAIHarvesterRun.query.get(run_id)
         if run.status == "running":
@@ -240,5 +273,7 @@ def harvest(
             run.end_time = datetime.datetime.utcnow()
             db.session.add(run)
             db.session.commit()
+
+        current_oai_run_service.indexer.bulk_index([run.id])
 
     return run_id
