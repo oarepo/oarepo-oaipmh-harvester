@@ -5,7 +5,6 @@ from typing import Any, cast
 from flask import current_app
 from flask_principal import Identity
 from invenio_db import db
-from oarepo_runtime.datastreams import BaseWriter, StreamBatch, StreamEntry
 
 from oarepo_oaipmh_harvester.models import OAIHarvestedRecord, OAIHarvesterRun
 from oarepo_oaipmh_harvester.proxies import (

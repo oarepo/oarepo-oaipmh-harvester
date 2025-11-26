@@ -1,7 +1,7 @@
 """Facet definitions."""
 
+from invenio_i18n import lazy_gettext as _
 from invenio_records_resources.services.records.facets import TermsFacet
-from oarepo_runtime.i18n import lazy_gettext as _
 
 code = TermsFacet(field="code", label=_("code.label"))
 

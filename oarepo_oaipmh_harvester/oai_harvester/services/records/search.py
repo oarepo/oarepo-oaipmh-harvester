@@ -1,12 +1,10 @@
-from oarepo_runtime.services.search import SearchOptions
+from invenio_records_resources.services.records.config import SearchOptions
 
 from . import facets
 
 
 class OaiHarvesterSearchOptions(SearchOptions):
     """OaiHarvesterRecord search options."""
-
-    facet_groups = {}
 
     facets = {
         "code": facets.code,

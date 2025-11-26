@@ -6,11 +6,6 @@ from typing import Dict, Union
 
 from invenio_access.permissions import system_identity
 from invenio_db import db
-from oarepo_runtime.datastreams import SynchronousDataStream
-from oarepo_runtime.datastreams.asynchronous import AsynchronousDataStream
-from oarepo_runtime.datastreams.datastreams import Signature
-from oarepo_runtime.datastreams.fixtures import fixtures_asynchronous_callback
-from oarepo_runtime.datastreams.types import StatsKeepingDataStreamCallback
 from sqlalchemy import func
 
 from oarepo_oaipmh_harvester.models import OAIHarvestedRecord, OAIHarvesterRun

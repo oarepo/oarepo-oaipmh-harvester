@@ -2,7 +2,7 @@ import datetime
 from typing import Iterator
 
 import pytz
-from oarepo_runtime.datastreams import BaseReader, StreamEntry
+from invenio_vocabularies.datastreams.readers import BaseReader
 from sickle import Sickle
 from sickle.oaiexceptions import NoRecordsMatch
 

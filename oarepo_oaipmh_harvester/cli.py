@@ -10,9 +10,6 @@ from flask import current_app
 from flask.cli import with_appcontext
 from invenio_access.permissions import system_identity
 from invenio_db import db
-from oarepo_runtime.cli import as_command, oarepo
-from oarepo_runtime.datastreams import StreamBatch
-from oarepo_runtime.datastreams.types import StatsKeepingDataStreamCallback
 from tqdm import tqdm
 
 from oarepo_oaipmh_harvester.harvester import harvest
@@ -31,7 +28,7 @@ logging.basicConfig(
 logging.getLogger("oaipmh.harvest").setLevel(logging.INFO)
 
 
-@oarepo.group(name="oai")
+@click.group(name="oai")
 def oai():
     """Classifier commands."""
 

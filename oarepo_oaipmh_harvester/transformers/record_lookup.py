@@ -2,8 +2,6 @@ from typing import Any, Generator, cast
 
 from flask_principal import Identity
 from invenio_records_resources.proxies import current_service_registry  # type: ignore
-from oarepo_runtime.datastreams import StreamBatch, StreamEntry
-from oarepo_runtime.datastreams.transformers import BaseTransformer
 
 from oarepo_oaipmh_harvester.models import OAIHarvestedRecord
 from oarepo_oaipmh_harvester.utils import oai_context, parse_iso_to_utc

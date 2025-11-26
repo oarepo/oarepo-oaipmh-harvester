@@ -2,7 +2,6 @@ from collections import defaultdict
 
 from dojson.contrib.marc21.utils import GroupableOrderedDict, create_record
 from lxml import etree
-from oarepo_runtime.datastreams import BaseTransformer, StreamBatch, StreamEntry
 
 
 class MarcXMLTransformer(BaseTransformer):

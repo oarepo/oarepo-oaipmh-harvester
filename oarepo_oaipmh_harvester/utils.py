@@ -6,8 +6,6 @@ from datetime import datetime
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
-from oarepo_runtime.datastreams import StreamEntry
-
 threadLocal = threading.local()
 
 

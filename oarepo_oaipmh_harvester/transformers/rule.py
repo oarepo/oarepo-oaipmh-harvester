@@ -6,8 +6,6 @@ from abc import abstractmethod
 from typing import Any, Callable, List, Protocol
 
 from flask_principal import Identity
-from oarepo_runtime.datastreams.transformers import BaseTransformer
-from oarepo_runtime.datastreams.types import StreamBatch, StreamEntry, StreamEntryError
 
 
 @dataclasses.dataclass
@@ -126,16 +124,14 @@ def matches[T](
 
 
 def matches_grouped[T](
-    *args: Any,
-    group: List[str],
-    unique: bool = False
+    *args: Any, group: List[str], unique: bool = False
 ) -> Callable[[RuleMethod[T]], RuleWrapperMethod[T]]:
     def wrapper(f: RuleMethod[T]) -> RuleWrapperMethod[T]:
         @functools.wraps(f)
         def wrapped(md: dict[str, Any], entry: StreamEntry):
             entry.processed.update(args)  # type: ignore
             untransformed_data = entry.entry
-            
+
             expected_length = None
             for arg in args:
                 if arg not in group:
@@ -146,7 +142,7 @@ def matches_grouped[T](
                     elif val is not None:
                         expected_length = 1
                         break
-            
+
             vals: list[list[Any] | tuple[Any, ...]] = []
             for arg in args:
                 val = untransformed_data.get(arg)
@@ -164,18 +160,19 @@ def matches_grouped[T](
                 else:
                     val = [val]
                 vals.append(val)
-            
+
             if all(len(x) == 0 for x in vals):
                 return
-            
+
             # zip longest
             items: set[Any] = set()
             for v in itertools.zip_longest(*vals):
                 if not unique or tuple(v) not in items:
                     f(md, entry, v)
                     items.add(tuple(v))
-                    
+
         return wrapped
+
     return wrapper
 
 

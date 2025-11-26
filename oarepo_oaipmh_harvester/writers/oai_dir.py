@@ -3,7 +3,6 @@ import gzip
 from pathlib import Path
 
 import yaml
-from oarepo_runtime.datastreams import BaseWriter, StreamBatch
 
 
 class OAIDirWriter(BaseWriter):

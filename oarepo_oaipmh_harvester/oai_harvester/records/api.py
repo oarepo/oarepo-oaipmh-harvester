@@ -1,13 +1,10 @@
 from invenio_pidstore.providers.recordid_v2 import RecordIdProviderV2
+from invenio_records.dumpers import SearchDumper
 from invenio_records.systemfields import ConstantField
 from invenio_records_resources.records.api import Record as InvenioRecord
 from invenio_records_resources.records.systemfields import IndexField
 from invenio_records_resources.records.systemfields.pid import PIDField, PIDFieldContext
-from oarepo_runtime.records.relations import RelationsField
 
-from oarepo_oaipmh_harvester.oai_harvester.records.dumpers.dumper import (
-    OaiHarvesterDumper,
-)
 from oarepo_oaipmh_harvester.oai_harvester.records.models import OaiHarvesterMetadata
 from oarepo_oaipmh_harvester.records.relations import UserRelation
 
@@ -30,7 +27,7 @@ class OaiHarvesterRecord(InvenioRecord):
         provider=OaiHarvesterIdProvider, context_cls=PIDFieldContext, create=True
     )
 
-    dumper = OaiHarvesterDumper()
+    dumper = SearchDumper()
 
     relations = RelationsField(
         harvest_managers=UserRelation(

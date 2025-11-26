@@ -1,5 +1,4 @@
 from invenio_db import db
-from oarepo_runtime.datastreams import StreamBatch
 
 from oarepo_oaipmh_harvester.models import OAIHarvesterRun
 

@@ -1,5 +1,4 @@
 from marshmallow import post_dump
-from oarepo_runtime.services.schema.marshmallow import BaseRecordSchema
 
 
 class BaseOaiRecordSchema(BaseRecordSchema):

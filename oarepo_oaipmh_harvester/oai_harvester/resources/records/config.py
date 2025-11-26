@@ -1,27 +1,32 @@
-import importlib_metadata
-from flask_resources.serializers.json import JSONSerializer
-from invenio_records_resources.resources.records.headers import etag_headers
-from oarepo_runtime.i18n import lazy_gettext as _
-from oarepo_runtime.resources.responses import ExportableResponseHandler
+import importlib.metadata
 
-from oarepo_oaipmh_harvester.common.resources.records.harvester_config import (
-    OaiHarvesterBaseResourceConfig,
-)
+from flask_resources.serializers.json import JSONSerializer
+from invenio_i18n import lazy_gettext as _
+from invenio_records_resources.resources import RecordResourceConfig
+from invenio_records_resources.resources.records.headers import etag_headers
+
 from oarepo_oaipmh_harvester.oai_harvester.resources.records.ui import (
     OaiHarvesterUIJSONSerializer,
 )
 
 
-class OaiHarvesterResourceConfig(OaiHarvesterBaseResourceConfig):
+class OaiHarvesterResourceConfig(RecordResourceConfig):
     """OaiHarvesterRecord resource config."""
 
     blueprint_name = "oarepo-oaipmh-harvester"
     url_prefix = "/oai/harvest/harvesters/"
 
+    api_service = "oarepo-oaipmh-harvesters"
+    routes = {
+        "list": "",
+        "item": "/<pid_value>",
+        "harvest": "/<pid_value>/start",
+    }
+
     @property
     def response_handlers(self):
         entrypoint_response_handlers = {}
-        for x in importlib_metadata.entry_points(
+        for x in importlib.metadata.entry_points(
             group="invenio.oarepo_oaipmh_harvester.oai_harvester.response_handlers"
         ):
             entrypoint_response_handlers.update(x.load())
@@ -43,7 +48,7 @@ class OaiHarvesterResourceConfig(OaiHarvesterBaseResourceConfig):
     @property
     def error_handlers(self):
         entrypoint_error_handlers = {}
-        for x in importlib_metadata.entry_points(
+        for x in importlib.metadata.entry_points(
             group="invenio.oarepo_oaipmh_harvester.oai_harvester_record.error_handlers"
         ):
             entrypoint_error_handlers.update(x.load())
@@ -52,7 +57,7 @@ class OaiHarvesterResourceConfig(OaiHarvesterBaseResourceConfig):
     @property
     def request_body_parsers(self):
         entrypoint_request_bodyparsers = {}
-        for x in importlib_metadata.entry_points(
+        for x in importlib.metadata.entry_points(
             group="invenio.oarepo_oaipmh_harvester.oai_harvester_record.request_bodyparsers"
         ):
             entrypoint_request_bodyparsers.update(x.load())

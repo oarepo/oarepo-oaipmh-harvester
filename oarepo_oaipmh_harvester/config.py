@@ -1,7 +1,9 @@
 from typing import Any
 
 from invenio_i18n import lazy_gettext as _
-from oarepo_runtime.datastreams import BaseReader, BaseTransformer, BaseWriter
+from invenio_vocabularies.datastreams.readers import BaseReader
+from invenio_vocabularies.datastreams.transformers import BaseTransformer
+from invenio_vocabularies.datastreams.writers import BaseWriter
 
 from oarepo_oaipmh_harvester.oai_record import facets as record_facets
 from oarepo_oaipmh_harvester.oai_run import facets as run_facets

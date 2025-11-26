@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Iterator
 
 import yaml
-from oarepo_runtime.datastreams import BaseReader, StreamEntry
+from invenio_vocabularies.datastreams.readers import BaseReader
 
 
 class OAIDirReader(BaseReader):

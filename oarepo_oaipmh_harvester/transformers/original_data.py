@@ -2,9 +2,6 @@ import copy
 import logging
 from typing import Any
 
-from oarepo_runtime.datastreams import StreamBatch
-from oarepo_runtime.datastreams.transformers import BaseTransformer
-
 from oarepo_oaipmh_harvester.utils import oai_context
 
 log = logging.getLogger("oaipmh.harvest")

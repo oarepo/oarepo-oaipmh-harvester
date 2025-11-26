@@ -1,11 +1,5 @@
 from invenio_db import db
 from invenio_users_resources.records.api import UserAggregate
-from oarepo_runtime.records.relations.base import (
-    Relation,
-    RelationResult,
-)
-from oarepo_runtime.records.relations.lookup import LookupResult
-from oarepo_runtime.services.relations.errors import InvalidRelationError
 
 
 class UserRelationResult(RelationResult):

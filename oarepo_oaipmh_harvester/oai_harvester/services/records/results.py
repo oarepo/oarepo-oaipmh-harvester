@@ -1,4 +1,4 @@
-from oarepo_runtime.services.results import RecordItem, RecordList
+from invenio_records_resources.services.records.results import RecordItem, RecordList
 
 
 class OaiHarvesterRecordItem(RecordItem):
