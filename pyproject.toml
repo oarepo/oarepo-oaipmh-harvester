@@ -1,0 +1,107 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "oarepo-oaipmh-harvester"
+dynamic = ["version"]
+description = 'OAIPMH harvester for Invenio repositories'
+readme = "README.md"
+requires-python = ">=3.13,<3.15"
+license = "MIT"
+keywords = []
+authors = [
+  { name = "Mirek Simek", email = "miroslav.simek@cesnet.cz" },
+  { name= "Alzbeta Pokorna", email = "alzbeta.pokorna@cesnet.cz" }
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+    "invenio-jobs>=6.0.0,<7.0.0",
+    "invenio-oaipmh-scythe>=0.13.0",
+    "json5",
+    # temporary upper bound to avoid issues with 1.0.0devx releases of httpx
+    # we use dev releases of our own packages and it means that a dev release
+    # of httpx 1.0 gets installed which has api changes that break things
+    "httpx<=0.9999" 
+]
+
+[project.urls]
+Documentation = "https://github.com/oarepo/oarepo-oaipmh-harvester"
+Issues = "https://github.com/oarepo/oarepo-oaipmh-harvester/issues"
+Source = "https://github.com/oarepo/oarepo-oaipmh-harvester"
+Homepage = "https://github.com/oarepo/oarepo-oaipmh-harvester"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.1.2",
+]
+tests = [
+    "pytest-oarepo",
+    "oarepo-model>=0.1.0dev0",
+    "pytest-mock"
+]
+oarepo14=[
+    "oarepo[rdm,tests]>=14.0.0,<15.0.0",
+]
+
+
+[tool.hatch.version]
+path = "oarepo_oaipmh_harvester/__init__.py"
+
+[project.entry-points."invenio_jobs.jobs"]
+harvest_oaipmh_records = "oarepo_oaipmh_harvester.jobs:OAIHarvestJob"
+
+[project.entry-points."invenio_db.alembic"]
+oarepo_oaipmh_harvester = "oarepo_oaipmh_harvester:alembic"
+
+[project.entry-points."invenio_base.api_apps"]
+oarepo_oaipmh = "oarepo_oaipmh_harvester.ext:OARepoOAIHarvesterExt"
+
+[project.entry-points."invenio_base.apps"]
+oarepo_oaipmh = "oarepo_oaipmh_harvester.ext:OARepoOAIHarvesterExt"
+
+[project.entry-points."invenio_administration.views"]
+oarepo_oai_harvester_list = "oarepo_oaipmh_harvester.administration.harvester.views:OAIPMHListView"
+oarepo_oaipmh_create = "oarepo_oaipmh_harvester.administration.harvester.views:OAIPMHCreateView"
+oarepo_oaipmh_harvester_edit = "oarepo_oaipmh_harvester.administration.harvester.views:OAIPMHEditView"
+oarepo_oaipmh_harvester_details = "oarepo_oaipmh_harvester.administration.harvester.views:OAIPMHDetailView"
+oarepo_oaipmh_record_list = "oarepo_oaipmh_harvester.administration.record.views:RecordListView"
+oarepo_oaipmh_record_details = "oarepo_oaipmh_harvester.administration.record.views:RecordDetailView"
+
+[project.entry-points."invenio_base.blueprints"]
+# oarepo-oaipmh-harvester = "oarepo_oaipmh_harvester.oai_harvester.views.records.app:create_app_blueprint"
+
+[project.entry-points."invenio_i18n.translations"]
+# oarepo_oaipmh = "oarepo_oaipmh_harvester"
+# oarepo-oaipmh-harvester = "oarepo_oaipmh_harvester.oai_harvester"
+
+[project.entry-points."invenio_db.models"]
+oarepo-oaipmh-harvester = "oarepo_oaipmh_harvester.oai_harvester.models"
+oarepo-oaipmh-harvester-record = "oarepo_oaipmh_harvester.oai_record.models"
+
+[project.entry-points."invenio_base.api_blueprints"]
+oarepo-oaipmh-harvester = "oarepo_oaipmh_harvester.oai_harvester.views:create_api_blueprint"
+oarepo-oaipmh-harvester_record = "oarepo_oaipmh_harvester.oai_record.views:create_api_blueprint"
+
+[project.entry-points."invenio_celery.tasks"]
+oarepo_harvest = "oarepo_oaipmh_harvester.tasks"
+
+[project.entry-points."invenio_search.mappings"]
+oai-harvester = "oarepo_oaipmh_harvester.oai_harvester.mappings"
+oai-harvest-record = "oarepo_oaipmh_harvester.oai_record.mappings"
+
+[project.entry-points."invenio_base.api_finalize_app"]
+oarepo_oaipmh_harvester = "oarepo_oaipmh_harvester.ext:finalize_apps"
+
+[project.entry-points."invenio_base.finalize_app"]
+oarepo_oaipmh_harvester = "oarepo_oaipmh_harvester.ext:finalize_apps"
+
+[project.entry-points."invenio_access.actions"]
+harvest_action = "oarepo_oaipmh_harvester.permissions:harvest_action"

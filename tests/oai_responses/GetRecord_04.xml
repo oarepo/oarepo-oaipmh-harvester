@@ -1,0 +1,26 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<?xml-stylesheet type="text/xsl" href="/static/oai2.xsl"?>
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd">
+    <responseDate>2025-12-03T11:03:11Z</responseDate>
+    <request verb="GetRecord" identifier="oai:zenodo.org:1" metadataPrefix="oai_dc">https://zenodo.org/oai2d</request>
+    <GetRecord>
+        <record>
+            <header>
+                <identifier>oai:zenodo.org:1</identifier>
+                <datestamp>2023-10-12T14:26:07Z</datestamp>
+                <setSpec>user-pyhep2023</setSpec>
+                <setSpec>openaire</setSpec>
+            </header>
+            <metadata>
+                <oai_dc:dc xmlns:dc="http://purl.org/dc/elements/1.1/"
+                    xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/oai_dc/ http://www.openarchives.org/OAI/2.0/oai_dc.xsd">
+                    <dc:creator>Record 1</dc:creator>
+                    <dc:date>2023-10-10</dc:date>
+                    <dc:title>Record 1 updated</dc:title>
+                    <dc:type>info:eu-repo/semantics/lecture</dc:type>
+                </oai_dc:dc>
+            </metadata>
+        </record>
+    </GetRecord>
+</OAI-PMH>
