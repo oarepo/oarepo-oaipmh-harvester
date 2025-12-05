@@ -26,7 +26,10 @@ dependencies = [
     "invenio-jobs>=6.0.0,<7.0.0",
     "invenio-oaipmh-scythe>=0.13.0",
     "json5",
-    "httpx<=0.9999"
+    # temporary upper bound to avoid issues with 1.0.0devx releases of httpx
+    # we use dev releases of our own packages and it means that a dev release
+    # of httpx 1.0 gets installed which has api changes that break things
+    "httpx<=0.9999" 
 ]
 
 [project.urls]

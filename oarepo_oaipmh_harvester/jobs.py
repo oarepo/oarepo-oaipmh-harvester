@@ -27,7 +27,17 @@ class OAIHarvestJob(JobType):
     """OAI Harvester Job."""
 
     id = "harvest_oaipmh_records"
-    """ID is passed by the subclass when harvester is created."""
+    """ID is passed by the subclass when harvester is created.
+
+    Note: jobs do not have parameters, only run parameters, but we need to pass
+    harvester_id and passing them as run parameters is not possible when
+    scheduling the job from the administration interface. Because of that,
+    we create a new subclass of this job for each harvester with the harvester
+    code embedded in the job ID.
+
+    The id of the job is then "harvest_oaipmh_records_{harvester_id}" and
+    this id is never used.
+    """
 
     title = "OAI Harvester Job"
     """Title is passed by the subclass when harvester is created."""
@@ -46,7 +56,7 @@ class OAIHarvestJob(JobType):
     ) -> dict:
         """Build task arguments for the job."""
         return {
-            "harvester_code": cls.id.replace("harvest_oaipmh_records_", ""),
+            "harvester_id": cls.id.replace("harvest_oaipmh_records_", ""),
             "since": since.isoformat() if since else None,
         }
 

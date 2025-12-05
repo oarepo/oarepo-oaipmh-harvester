@@ -24,11 +24,9 @@ if TYPE_CHECKING:
 
 
 @shared_task
-def harvest_oaipmh_records(
-    *, harvester_code: str, since: datetime | None = None, batch_size: int | None = None
-) -> None:
+def harvest_oaipmh_records(*, harvester_id: str, since: datetime | None = None, batch_size: int | None = None) -> None:
     """Harvest OAI-PMH records for the given harvester."""
-    harvester = OAIHarvesterAggregate.get_record(harvester_code)
+    harvester = OAIHarvesterAggregate.get_record(harvester_id)
     readers_config = create_readers(harvester, since=since)
     transformers_config = create_transformers(harvester)
     writers_config = create_writers(harvester)
@@ -58,9 +56,6 @@ def parse_config(config: str) -> tuple[str, dict]:
 
     args = cast("dict", json5.loads(args_str))
     return type_, args
-
-
-# TODO: handle since properly, currently ignored
 
 
 def create_readers(harvester: OAIHarvesterAggregate, since: datetime | None = None) -> dict:
