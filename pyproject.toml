@@ -29,6 +29,7 @@ dependencies = [
     "invenio-jobs>=6.0.0,<7.0.0",
     "invenio-oaipmh-scythe>=0.13.0",
     "json5"
+    "httpx<=1.0.0"
 ]
 
 [project.urls]
