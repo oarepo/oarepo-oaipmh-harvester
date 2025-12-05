@@ -95,7 +95,7 @@ class OAIHarvesterAggregate(BaseAggregate):
     """The list of writers."""
 
     harvest_managers = ModelField("harvest_managers", dump_type=list)
-    """The list of harvest managers."""
+    """The list of harvest managers. Each item is a dict with 'user' key with user ID."""
 
     @classmethod
     @override

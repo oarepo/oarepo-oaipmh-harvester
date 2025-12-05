@@ -68,7 +68,13 @@
                 "type": "keyword"
             },
             "harvest_managers": {
-                "type": "keyword"
+                "type": "object",
+                "properties": {
+                    "user": {
+                        "type": "keyword",
+                        "ignore_above": 1024
+                    }
+                }
             },
             "indexed_at": {
                 "type": "date"

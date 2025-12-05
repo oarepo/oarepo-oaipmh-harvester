@@ -23,7 +23,7 @@ class AddHarvesterDumperExt(SearchDumperExt):
         """Dump the data."""
         harvester = record.harvester
         data["harvester_name"] = harvester.name
-        data["harvest_managers"] = [x["user"] for x in (harvester.harvest_managers or []) if "user" in x]
+        data["harvest_managers"] = harvester.harvest_managers or []
 
     @override
     def load(self, data: dict[str, Any], record_cls: type) -> None:

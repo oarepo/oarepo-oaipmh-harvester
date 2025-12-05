@@ -87,7 +87,15 @@ def register_current_harvesters() -> None:
         for job in db.session.query(Job).filter(Job.task.startswith("harvest_oaipmh_records_")):
             task = job.task
             register_oaipmh_job(task)
+    # An exception might happen for example during invenio db init when
+    # the application is started but the database is not yet initialized.
+    # We ignore these exceptions with a general except clause, as different
+    # kinds of exceptions might happen depending on the situation.
+    # We only re-raise SystemExit and KeyboardInterrupt to allow proper
+    # shutdown of the application in case of user interruption.
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        raise
     except Exception:  # noqa BLE001
-        # An exception might happen for example during invenio db init when
-        # the application is started but the database is not yet initialized.
         db.session.rollback()

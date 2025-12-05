@@ -25,7 +25,7 @@ def test_harvester_crud(db, app, search, search_clear):
         "loader": "oai_dc_loader",
         "transformers": ["transformer1", "transformer2"],
         "writers": ["writer1"],
-        "harvest_managers": ["1"],
+        "harvest_managers": [{"user": "1"}],
         "comment": "This is a test harvester.",
     }
 

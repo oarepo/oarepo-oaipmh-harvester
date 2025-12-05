@@ -42,7 +42,8 @@ def oai_record_permissions_decorator[**P, R_co](
         manager_needs = set()
         for md in OAIHarvester.query.all():
             for manager in (md.json or {}).get("harvest_managers", []):
-                manager_needs.add(UserNeed(manager["id"]))
+                if "user" in manager:
+                    manager_needs.add(UserNeed(manager["user"]))
         oai_record_permission = Permission(administration_access_action, *manager_needs)  # type: ignore[reportArgumentType]
 
         return cast(

@@ -134,7 +134,8 @@ class OAIServiceWriter(BaseWriter):
             exception_raised = e
             raise
         finally:
-            # 4. create or update the oai record
+            # In case of exception, the session has been rolled back in the lines
+            # above, so we can safely proceed to store the OAI record
             self._store_oai_record(
                 oai_record,
                 oai_identifier,

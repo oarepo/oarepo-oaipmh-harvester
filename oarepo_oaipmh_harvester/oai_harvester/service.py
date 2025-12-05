@@ -323,6 +323,7 @@ class OAIHarvesterService(RecordService):
 
         from ..tasks import harvest_oaipmh_records
 
+        # Fire-and-forget: we do not need the result of the Celery task here.
         harvest_oaipmh_records.delay(oai_harvester.id)  # type: ignore[reportFunctionMemberAccess]
 
         return self.result_item(self, identity, oai_harvester, links_tpl=self.links_item_tpl)

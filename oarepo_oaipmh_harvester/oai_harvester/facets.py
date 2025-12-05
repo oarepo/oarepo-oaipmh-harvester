@@ -27,4 +27,4 @@ transformers = TermsFacet(field="transformers", label=_("Transformers"))
 
 writers = TermsFacet(field="writers", label=_("Writers"))
 
-harvest_managers = TermsFacet(field="harvest_managers", label=_("Harvest Managers"))
+harvest_managers = TermsFacet(field="harvest_managers.user", label=_("Harvest Managers"))

@@ -37,17 +37,13 @@ if TYPE_CHECKING:
 class HarvestManager(Generator):
     """Enables access to logs for harvest managers."""
 
-    def __init__(self):
-        """Create the generator."""
-        super(Generator, self).__init__()
-
     @override
     def needs(self, **kwargs: Any) -> Collection[Need]:
         """Return the needs for harvest managers."""
         if "record" not in kwargs:
             return []
         record = kwargs["record"]
-        return [UserNeed(manager["id"]) for manager in record.get("harvest_managers", [])]
+        return [UserNeed(manager["user"]) for manager in record.get("harvest_managers", []) if "user" in manager]
 
     @override
     def query_filter(self, **kwargs: Any) -> dsl.query.Query | list[dsl.query.Query] | None:
@@ -55,7 +51,7 @@ class HarvestManager(Generator):
         identity = kwargs["identity"]
         if not identity or not identity.id:
             return MatchNone()
-        return Term(**{"harvest_managers.id": identity.id})
+        return Term(**{"harvest_managers.user": identity.id})
 
 
 class ActionQueryFilterMixin:
@@ -151,10 +147,6 @@ class OAIHarvesterPermissionPolicy(RecordPermissionPolicy):
 class HarvestRecordManager(Generator):
     """Generator for giving access to harvested records for harvest record managers."""
 
-    def __init__(self):
-        """Create the generator."""
-        super(Generator, self).__init__()
-
     @override
     def needs(self, **kwargs: Any) -> Collection[Need]:
         """Return the needs for harvest record managers."""
@@ -163,14 +155,14 @@ class HarvestRecordManager(Generator):
 
         harvester = kwargs["record"].harvester
 
-        return [UserNeed(manager["id"]) for manager in (harvester.harvest_managers or [])]
+        return [UserNeed(manager["user"]) for manager in (harvester.harvest_managers or []) if "user" in manager]
 
     def query_filter(self, **kwargs: Any) -> dsl.query.Query | list[dsl.query.Query] | None:
         """Return search filter for harvest record managers."""
         identity = kwargs["identity"]
         if not identity or not identity.id:
             return MatchNone()
-        return Term(harvest_managers=identity.id)
+        return Term(**{"harvest_managers.user": identity.id})
 
 
 class OAIRecordPermissionPolicy(RecordPermissionPolicy):
