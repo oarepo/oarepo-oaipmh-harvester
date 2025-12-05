@@ -1,0 +1,78 @@
+{
+    "mappings": {
+        "dynamic": "strict",
+        "properties": {
+            "$schema": {
+                "type": "keyword",
+                "index": "false"
+            },
+            "id": {
+                "type": "keyword"
+            },
+            "version_id": {
+                "type": "integer"
+            },
+            "uuid": {
+                "type": "keyword"
+            },
+            "created": {
+                "type": "date"
+            },
+            "updated": {
+                "type": "date"
+            },
+            "oai_identifier": {
+                "type": "keyword"
+            },
+            "record_id": {
+                "type": "keyword"
+            },
+            "datestamp": {
+                "type": "date"
+            },
+            "harvested_at": {
+                "type": "date"
+            },
+            "deleted": {
+                "type": "boolean"
+            },
+            "has_errors": {
+                "type": "boolean"
+            },
+            "has_warnings": {
+                "type": "boolean"
+            },
+            "errors": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "keyword"
+                    },
+                    "location": {
+                        "type": "keyword"
+                    }
+                }
+            },
+            "original_data": {
+                "type": "object",
+                "enabled": false
+            },
+            "transformed_data": {
+                "type": "object",
+                "enabled": false
+            },
+            "harvester_id": {
+                "type": "keyword"
+            },
+            "harvester_name": {
+                "type": "keyword"
+            },
+            "harvest_managers": {
+                "type": "keyword"
+            },
+            "indexed_at": {
+                "type": "date"
+            }
+        }
+    }
+}

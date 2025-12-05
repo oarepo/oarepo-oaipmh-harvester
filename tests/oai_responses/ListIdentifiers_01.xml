@@ -1,0 +1,33 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<?xml-stylesheet type="text/xsl" href="/static/oai2.xsl"?>
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd">
+    <responseDate>2025-12-03T10:59:39Z</responseDate>
+    <request verb="ListIdentifiers" metadataPrefix="oai_dc">https://zenodo.org/oai2d</request>
+    <ListIdentifiers>
+        <header>
+            <identifier>oai:zenodo.org:1</identifier>
+            <datestamp>2023-10-12T14:26:07Z</datestamp>
+            <setSpec>user-pyhep2023</setSpec>
+            <setSpec>openaire</setSpec>
+        </header>
+        <header>
+            <identifier>oai:zenodo.org:2</identifier>
+            <datestamp>2023-10-12T14:26:07Z</datestamp>
+            <setSpec>user-pyhep2023</setSpec>
+            <setSpec>openaire</setSpec>
+        </header>
+        <header>
+            <identifier>oai:zenodo.org:2</identifier>
+            <datestamp>2023-10-12T14:26:07Z</datestamp>
+            <setSpec>user-pyhep2023</setSpec>
+            <setSpec>openaire</setSpec>
+        </header>
+        <header>
+            <identifier>oai:zenodo.org:1</identifier>
+            <datestamp>2023-10-12T14:26:07Z</datestamp>
+            <setSpec>user-pyhep2023</setSpec>
+            <setSpec>openaire</setSpec>
+        </header>
+    </ListIdentifiers>
+</OAI-PMH>
