@@ -15,7 +15,9 @@ from invenio_pidstore.errors import PIDDoesNotExistError
 from oarepo_oaipmh_harvester.proxies import current_oai_harvester_service
 
 
-def test_harvester_crud(db, app, search, search_clear):
+def test_harvester_crud(
+    db, app, search, search_clear, user_with_administration_rights, client
+):
     harvester_data = {
         "id": "test",
         "name": "Test Harvester",
@@ -52,26 +54,71 @@ def test_harvester_crud(db, app, search, search_clear):
     assert read_harvester_dict["id"] == harvester_data["id"]
     assert read_harvester_dict["name"] == created_harvester["name"]
 
-    found_harvesters = current_oai_harvester_service.search(system_identity, {"q": "Test"}).to_dict()
+    # use http client to read the harvester
+    # we need to merge the user as expunge_all detached it and client depends on it
+    user_with_administration_rights._user = db.session.merge(  # noqa: SLF001
+        user_with_administration_rights.user
+    )
+    user_with_administration_rights.api_login(client)
+    response = client.get(f"/api/oai/harvest/harvesters/{harvester.id}")
+    assert response.status_code == 200
+    response_data = response.get_json()
+    assert response_data["id"] == harvester_data["id"]
+    assert response_data["name"] == harvester_data["name"]
+    assert response_data["base_url"] == harvester_data["base_url"]
+    assert response_data["metadata_prefix"] == harvester_data["metadata_prefix"]
+    assert response_data["setspec"] == harvester_data["setspec"]
+    assert response_data["loader"] == harvester_data["loader"]
+    assert response_data["transformers"] == harvester_data["transformers"]
+    assert response_data["writers"] == harvester_data["writers"]
+    assert response_data["harvest_managers"] == harvester_data["harvest_managers"]
+    assert response_data["comment"] == harvester_data["comment"]
+
+    found_harvesters = current_oai_harvester_service.search(
+        system_identity, {"q": "Test"}
+    ).to_dict()
     assert found_harvesters["hits"]["total"] == 1
     assert found_harvesters["hits"]["hits"][0]["id"] == harvester_data["id"]
+
+    response = client.get("/api/oai/harvest/harvesters/?q=Test")
+    assert response.status_code == 200
+    response_data = response.get_json()
+    assert response_data["hits"]["total"] == 1
+    assert response_data["hits"]["hits"][0]["id"] == harvester_data["id"]
 
     updated_data = {
         **read_harvester_dict,
         "name": "Updated Harvester",
         "comment": "This is an updated test harvester.",
     }
-    updated_harvester = current_oai_harvester_service.update(system_identity, harvester.id, updated_data).to_dict()
+    updated_harvester = current_oai_harvester_service.update(
+        system_identity, harvester.id, updated_data
+    ).to_dict()
     current_oai_harvester_service.indexer.refresh()
     assert updated_harvester["name"] == updated_data["name"]
     assert updated_harvester["comment"] == updated_data["comment"]
+
+    response = client.put(
+        f"/api/oai/harvest/harvesters/{harvester.id}",
+        json={
+            **updated_harvester,
+            "name": "Updated Harvester via API",
+            "comment": "This is an updated test harvester via API.",
+        },
+    )
+    assert response.status_code == 200
+    response_data = response.get_json()
+    assert response_data["name"] == "Updated Harvester via API"
+    assert response_data["comment"] == "This is an updated test harvester via API."
 
     # read again and check
     db.session.expunge_all()
     read_harvester = current_oai_harvester_service.read(system_identity, harvester.id)
     read_harvester_dict = read_harvester.to_dict()
-    assert read_harvester_dict["name"] == updated_data["name"]
-    assert read_harvester_dict["comment"] == updated_data["comment"]
+    assert read_harvester_dict["name"] == "Updated Harvester via API"
+    assert (
+        read_harvester_dict["comment"] == "This is an updated test harvester via API."
+    )
 
     current_oai_harvester_service.delete(system_identity, harvester.id)
     current_oai_harvester_service.indexer.refresh()

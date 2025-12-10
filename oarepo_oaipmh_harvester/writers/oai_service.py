@@ -75,7 +75,7 @@ class OAIServiceWriter(BaseWriter):
         """Write the input entry using a given service."""
         current_app.logger.debug("Writing entry: %s", stream_entry.entry)
         harvested_at = datetime.datetime.now(datetime.UTC)
-        original_data = {"oai_xml": stream_entry.entry["oai_record"].raw}
+        original_data = {"oai_payload": stream_entry.entry["oai_record"].raw}
         transformed_data = stream_entry.entry["record"]
 
         # 0. extract the record oai identifier
@@ -84,7 +84,11 @@ class OAIServiceWriter(BaseWriter):
         oai_deleted = stream_entry.entry["oai_record"].header.deleted
 
         # 1. check if there is an OAI record already
-        oai_record = db.session.query(OAIHarvestedRecord).filter_by(oai_identifier=oai_identifier).one_or_none()
+        oai_record = (
+            db.session.query(OAIHarvestedRecord)
+            .filter_by(oai_identifier=oai_identifier)
+            .one_or_none()
+        )
 
         # 2. if so
         pid_value = None
@@ -100,7 +104,9 @@ class OAIServiceWriter(BaseWriter):
             ):
                 # try to read the existing record
                 try:
-                    fetched_record = self.service.read(system_identity, oai_record.record_pid)
+                    fetched_record = self.service.read(
+                        system_identity, oai_record.record_pid
+                    )
                     stream_entry.entry["record"] = fetched_record.to_dict()
                 except Exception:  # noqa: BLE001 to catch all possible errors
                     current_app.logger.warning(
@@ -178,11 +184,17 @@ class OAIServiceWriter(BaseWriter):
                 harvester_id=self.harvester_id,
             )
         # store errors and warnings
-        oai_record.errors = [self._convert_stream_error(e) for e in (stream_entry.errors or [])]
+        oai_record.errors = [
+            self._convert_stream_error(e) for e in (stream_entry.errors or [])
+        ]
         if exception_raised is not None:
-            oai_record.errors.append(self._convert_exception_to_error_dict(exception_raised))
+            oai_record.errors.append(
+                self._convert_exception_to_error_dict(exception_raised)
+            )
         if stream_entry.exc:
-            oai_record.errors.append(self._convert_exception_to_error_dict(stream_entry.exc))
+            oai_record.errors.append(
+                self._convert_exception_to_error_dict(stream_entry.exc)
+            )
         oai_record.harvested_at = harvested_at
         oai_record.has_errors = bool(oai_record.errors)
         # no warnings tracking for now
@@ -204,10 +216,14 @@ class OAIServiceWriter(BaseWriter):
 
         current_oai_record_service.indexer.bulk_index([oai_record.oai_identifier])
 
-    def _write(self, record_data: dict, pid_value: str | None, op_type: str) -> dict | None:
+    def _write(
+        self, record_data: dict, pid_value: str | None, op_type: str
+    ) -> dict | None:
         """Write the record data using the service."""
         if op_type == "create":
-            return cast("dict", self.service.create(self._identity, record_data).to_dict())
+            return cast(
+                "dict", self.service.create(self._identity, record_data).to_dict()
+            )
         if op_type == "update":
             if pid_value is None:
                 raise ValueError("pid_value must be provided for update operation")
@@ -221,10 +237,14 @@ class OAIServiceWriter(BaseWriter):
             return None
         raise ValueError(f"Unknown operation type: {op_type}")
 
-    def write_many(self, stream_entries: list[StreamEntry], *args: Any, **kwargs: Any) -> list[StreamEntry]:
+    def write_many(
+        self, stream_entries: list[StreamEntry], *args: Any, **kwargs: Any
+    ) -> list[StreamEntry]:
         """Write the input entries using a given service."""
         # For now, just call write() for each entry
-        return [self.write(stream_entry, *args, **kwargs) for stream_entry in stream_entries]
+        return [
+            self.write(stream_entry, *args, **kwargs) for stream_entry in stream_entries
+        ]
 
     def _convert_exception_to_error_dict(self, exception: Exception) -> dict:
         return {

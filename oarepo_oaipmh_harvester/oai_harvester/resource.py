@@ -56,10 +56,16 @@ class AdministrationDetailJSONSerializer(JSONSerializer):
         obj_list = [self._convert_to_administration_detail(obj) for obj in obj_list]
         return super().serialize_object_list(obj_list)  # type: ignore[no-any-return]
 
-    def _convert_to_administration_detail(self, serialized_harvester: dict[str, Any]) -> dict[str, Any]:
+    def _convert_to_administration_detail(
+        self, serialized_harvester: dict[str, Any]
+    ) -> dict[str, Any]:
         serialized_harvester = {**serialized_harvester}
-        serialized_harvester["transformers"] = data_to_html_yaml(serialized_harvester["transformers"])
-        serialized_harvester["writers"] = data_to_html_yaml(serialized_harvester["writers"])
+        serialized_harvester["transformers"] = data_to_html_yaml(
+            serialized_harvester["transformers"]
+        )
+        serialized_harvester["writers"] = data_to_html_yaml(
+            serialized_harvester["writers"]
+        )
         # TODO: link to jobs here
         return serialized_harvester
 
@@ -105,6 +111,8 @@ class OAIHarvesterResource(RecordResource):
         return [
             route("GET", routes["list"], self.search),
             route("GET", routes["item"], self.read),
+            route("PUT", routes["item"], self.update),
+            route("DELETE", routes["item"], self.delete),
             route("POST", routes["harvest"], self.harvest),
         ]
 
@@ -125,7 +133,7 @@ class OAIHarvesterResource(RecordResource):
     def read(self) -> tuple[dict[str, Any], int]:
         """Read an oai harvester."""
         item = self.service.read(
-            id_=resource_requestctx.view_args["id"],
+            id_=resource_requestctx.view_args["pid_value"],
             identity=g.identity,
         )
         return item.to_dict(), 200
@@ -135,7 +143,7 @@ class OAIHarvesterResource(RecordResource):
     def harvest(self) -> tuple[dict[str, Any], int]:
         """Re-harvest the source."""
         item = self.service.harvest(
-            id_=resource_requestctx.view_args["id"],
+            id_=resource_requestctx.view_args["pid_value"],
             identity=g.identity,
         )
         return item.to_dict(), 200

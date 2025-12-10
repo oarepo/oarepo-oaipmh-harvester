@@ -13,6 +13,7 @@ from typing import Any, ClassVar
 import pytest
 from flask import current_app
 from flask_resources.deserializers import DeserializerMixin
+from invenio_access.models import ActionUsers
 from invenio_app.factory import create_app as _create_app
 from lxml import etree
 from oarepo_model.api import model
@@ -21,6 +22,12 @@ from oarepo_model.presets.records_resources import records_resources_preset
 
 RawEntry = tuple[str | None, str]
 LocalizedEntry = dict[str, str]
+
+pytest_plugins = [
+    "pytest_oarepo.ui.fixtures",
+    "pytest_oarepo.fixtures",
+    "pytest_oarepo.users",
+]
 
 
 class OAIDeserializer(DeserializerMixin):
@@ -57,7 +64,9 @@ class OAIDeserializer(DeserializerMixin):
             tag = etree.QName(elem).localname
             if tag not in metadata:
                 metadata[tag] = []
-            metadata[tag].append((elem.get("{http://www.w3.org/XML/1998/namespace}lang"), elem.text))
+            metadata[tag].append(
+                (elem.get("{http://www.w3.org/XML/1998/namespace}lang"), elem.text)
+            )
 
         metadata = self.process_metadata(metadata)
         return {
@@ -77,7 +86,9 @@ class OAIDeserializer(DeserializerMixin):
                 continue
             spec = self.FIELD_SPECS[field]
             if not spec["repeatable"] and len(normalized) > 1:
-                raise ValueError(f"dc:{field} is not repeatable but {len(normalized)} instances were provided.")
+                raise ValueError(
+                    f"dc:{field} is not repeatable but {len(normalized)} instances were provided."
+                )
             processed[field] = self._convert_entries(normalized, spec)
         return processed
 
@@ -190,9 +201,15 @@ def test_model():
 
 @pytest.fixture(scope="module")
 def app_config(app_config, test_model):
-    app_config["RECORDS_REFRESOLVER_CLS"] = "invenio_records.resolver.InvenioRefResolver"
-    app_config["RECORDS_REFRESOLVER_STORE"] = "invenio_jsonschemas.proxies.current_refresolver_store"
+    app_config["RECORDS_REFRESOLVER_CLS"] = (
+        "invenio_records.resolver.InvenioRefResolver"
+    )
+    app_config["RECORDS_REFRESOLVER_STORE"] = (
+        "invenio_jsonschemas.proxies.current_refresolver_store"
+    )
     app_config["CELERY_TASK_ALWAYS_EAGER"] = True
+    # disable session protection for tests to avoid issues with Flask-Login
+    app_config["SESSION_PROTECTION"] = None
     return app_config
 
 
@@ -200,3 +217,16 @@ def app_config(app_config, test_model):
 def create_app(instance_path, entry_points):
     """Application factory fixture."""
     return _create_app
+
+
+@pytest.fixture
+def user_with_administration_rights(app, db, users):
+    """Set administration rights to the first user and return it."""
+    user = users[0]
+    actions = app.extensions["invenio-access"].actions
+    act = ActionUsers.allow(actions["administration-access"], user_id=user.user.id)
+    db.session.add(act)
+    db.session.commit()
+    yield user
+    db.session.delete(act)
+    db.session.commit()

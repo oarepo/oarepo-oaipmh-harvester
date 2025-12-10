@@ -108,7 +108,7 @@ class OAIHarvesterAggregateModel(AggregateMetadata):
             with db.session.no_autoflush:
                 self._model_obj = OAIHarvester.query.get(_id)
         if self._model_obj is None:
-            raise ValueError("OAIHarvester not found")
+            raise ValueError("OAIHarvester not found")  # pragma: no cover
         return self._model_obj
 
     @property
