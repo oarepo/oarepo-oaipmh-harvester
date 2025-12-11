@@ -91,11 +91,7 @@ class OAIServiceWriter(BaseWriter):
         oai_deleted = stream_entry.entry["oai_record"].header.deleted
 
         # 1. check if there is an OAI record already
-        oai_record = (
-            db.session.query(OAIHarvestedRecord)
-            .filter_by(oai_identifier=oai_identifier)
-            .one_or_none()
-        )
+        oai_record = db.session.query(OAIHarvestedRecord).filter_by(oai_identifier=oai_identifier).one_or_none()
 
         # 2. if so
         pid_value = None
@@ -111,9 +107,7 @@ class OAIServiceWriter(BaseWriter):
             ):
                 # try to read the existing record
                 try:
-                    fetched_record = self.service.read(
-                        system_identity, oai_record.record_pid
-                    )
+                    fetched_record = self.service.read(system_identity, oai_record.record_pid)
                     stream_entry.entry["record"] = fetched_record.to_dict()
                 except Exception:  # noqa: BLE001 to catch all possible errors
                     current_app.logger.warning(
@@ -158,22 +152,17 @@ class OAIServiceWriter(BaseWriter):
                 if written_data and written_data.get("errors"):
                     # the service reported errors during creation/update
                     stream_entry.errors = written_data["errors"]
-                    raise ValidationError(
-                        "Errors during record write operation: "
-                        + json.dumps(written_data["errors"])
-                    )
+                    raise ValidationError("Errors during record write operation: " + json.dumps(written_data["errors"]))
                 if self._publish and written_data and op_type == "create":
                     publish_method = getattr(self.service, "publish", None)
                     if not publish_method:
-                        raise NotImplementedError(
-                            f"The service for model {self._model} does not support publishing."
-                        )
+                        raise NotImplementedError(f"The service for model {self._model} does not support publishing.")
                     publish_method(
                         self._identity,
                         dict_lookup(written_data, self._pid_field),
                         uow=uow,
                     )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 to catch all possible errors
             # we can't know the state of the db connection, rollback is a safe bet
             db.session.rollback()
             exception_raised = e
@@ -222,17 +211,11 @@ class OAIServiceWriter(BaseWriter):
                 harvester_id=self._harvester_id,
             )
         # store errors and warnings
-        oai_record.errors = [
-            self._convert_stream_error(e) for e in (stream_entry.errors or [])
-        ]
+        oai_record.errors = [self._convert_stream_error(e) for e in (stream_entry.errors or [])]
         if exception_raised is not None:
-            oai_record.errors.append(
-                self._convert_exception_to_error_dict(exception_raised)
-            )
+            oai_record.errors.append(self._convert_exception_to_error_dict(exception_raised))
         if stream_entry.exc:
-            oai_record.errors.append(
-                self._convert_exception_to_error_dict(stream_entry.exc)
-            )
+            oai_record.errors.append(self._convert_exception_to_error_dict(stream_entry.exc))
         oai_record.harvested_at = harvested_at
         oai_record.has_errors = bool(oai_record.errors)
         # no warnings tracking for now
@@ -254,9 +237,7 @@ class OAIServiceWriter(BaseWriter):
 
         current_oai_record_service.indexer.bulk_index([oai_record.oai_identifier])
 
-    def _write(
-        self, record_data: dict, pid_value: str | None, op_type: str, uow: UnitOfWork
-    ) -> dict | None:
+    def _write(self, record_data: dict, pid_value: str | None, op_type: str, uow: UnitOfWork) -> dict | None:
         """Write the record data using the service."""
         if op_type == "create":
             return cast(
@@ -269,23 +250,17 @@ class OAIServiceWriter(BaseWriter):
             try:
                 return cast(
                     "dict",
-                    self.service.update(
-                        self._identity, pid_value, record_data, uow=uow
-                    ).to_dict(),
+                    self.service.update(self._identity, pid_value, record_data, uow=uow).to_dict(),
                 )
             except Exception:  # noqa BLE001 to catch all possible errors
                 # if update fails, try to update draft
                 try:
                     update_draft = getattr(self.service, "update_draft", None)
                     if update_draft is None:
-                        raise NotImplementedError(
-                            f"The service for model {self._model} does not support draft update."
-                        )
+                        raise NotImplementedError(f"The service for model {self._model} does not support draft update.")
                     return cast(
                         "dict",
-                        update_draft(
-                            self._identity, pid_value, record_data, uow=uow
-                        ).to_dict(),
+                        update_draft(self._identity, pid_value, record_data, uow=uow).to_dict(),
                     )
                 except Exception:  # noqa BLE001 to catch all possible errors
                     # if draft update also fails, try to create new record
@@ -297,14 +272,10 @@ class OAIServiceWriter(BaseWriter):
             return None
         raise ValueError(f"Unknown operation type: {op_type}")
 
-    def write_many(
-        self, stream_entries: list[StreamEntry], *args: Any, **kwargs: Any
-    ) -> list[StreamEntry]:
+    def write_many(self, stream_entries: list[StreamEntry], *args: Any, **kwargs: Any) -> list[StreamEntry]:
         """Write the input entries using a given service."""
         # For now, just call write() for each entry
-        return [
-            self.write(stream_entry, *args, **kwargs) for stream_entry in stream_entries
-        ]
+        return [self.write(stream_entry, *args, **kwargs) for stream_entry in stream_entries]
 
     def _convert_exception_to_error_dict(self, exception: Exception) -> dict:
         return {
