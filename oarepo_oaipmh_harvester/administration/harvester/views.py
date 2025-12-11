@@ -115,9 +115,7 @@ class OAIPMHDetailView(OAIHarvesterPermissionsMixin, AdminResourceDetailView):
 
     url = "/oarepo/harvesters/<pid_value>"
     api_endpoint = "/oai/harvest/harvesters/"
-    request_headers: Mapping[str, str] = {
-        "Accept": "application/vnd.inveniordm.v1+json"
-    }
+    request_headers: Mapping[str, str] = {"Accept": "application/vnd.inveniordm.v1+json"}
     name = "oarepo_oaipmh_harvesters_detail"
     resource_config = "oai_harvester_resource"
     title = "OAI-PMH Harvesters"
@@ -219,9 +217,7 @@ class OAIHarvesterFormMixin:
         "harvest_managers": {
             "order": 12,
             "text": _("Harvest managers"),
-            "description": _(
-                "Email addresses of harvest managers separated by newlines."
-            ),
+            "description": _("Email addresses of harvest managers separated by newlines."),
             "type": "textarea",
             "rows": 4,
         },
@@ -239,13 +235,10 @@ class OAIHarvesterFormMixin:
         ret["writers"] = {"type": "string"}
         ret["harvest_managers"] = {"type": "string"}
         ret["setspec"] = {"type": "string"}
-        print(ret)
         return ret
 
 
-class OAIPMHEditView(
-    OAIHarvesterPermissionsMixin, OAIHarvesterFormMixin, AdminFormView
-):  # OarepoAdminFormView):
+class OAIPMHEditView(OAIHarvesterPermissionsMixin, OAIHarvesterFormMixin, AdminFormView):  # OarepoAdminFormView):
     """Configuration for OAI-PMH sets edit view."""
 
     name = "oarepo_oaipmh_edit"
@@ -259,9 +252,7 @@ class OAIPMHEditView(
     list_view_name = "oarepo_oaipmh_harvesters"
 
 
-class OAIPMHCreateView(
-    OAIHarvesterPermissionsMixin, OAIHarvesterFormMixin, AdminFormView
-):
+class OAIPMHCreateView(OAIHarvesterPermissionsMixin, OAIHarvesterFormMixin, AdminFormView):
     """Configuration for OAI-PMH sets create view."""
 
     name = "oarepo_oaipmh_create"

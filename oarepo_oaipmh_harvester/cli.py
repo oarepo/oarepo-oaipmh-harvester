@@ -1,3 +1,13 @@
+#
+# Copyright (c) 2025 CESNET z.s.p.o.
+#
+# This file is a part of oarepo-oaipmh-harvester (see https://github.com/oarepo/oarepo-oaipmh-harvester).
+#
+# oarepo-oaipmh-harvester is free software; you can redistribute it and/or modify it
+# under the terms of the MIT License; see LICENSE file for more details.
+#
+"""OAI-PMH Harvester CLI commands."""
+
 from __future__ import annotations
 
 import json
@@ -59,12 +69,8 @@ def list_harvesters(json_output: bool) -> None:
                 "writers": harvester.writers,
                 "harvest_managers": harvester.harvest_managers,
                 "comment": harvester.comment,
-                "created": (
-                    harvester.created.isoformat() if harvester.created else None
-                ),
-                "updated": (
-                    harvester.updated.isoformat() if harvester.updated else None
-                ),
+                "created": (harvester.created.isoformat() if harvester.created else None),
+                "updated": (harvester.updated.isoformat() if harvester.updated else None),
             }
             for harvester in harvesters
         ]
@@ -78,9 +84,7 @@ def list_harvesters(json_output: bool) -> None:
         console = Console()
 
         # Main table
-        table = Table(
-            title="OAI-PMH Harvesters", show_header=True, header_style="bold magenta"
-        )
+        table = Table(title="OAI-PMH Harvesters", show_header=True, header_style="bold magenta")
         table.add_column("ID", style="cyan")
         table.add_column("Name", style="green")
         table.add_column("Base URL", style="blue")
@@ -103,19 +107,11 @@ def list_harvesters(json_output: bool) -> None:
         # Additional details
         console.print("\n[bold]Additional Details:[/bold]")
         for harvester in harvesters:
-            console.print(
-                f"\n[bold cyan]Harvester:[/bold cyan] {harvester.name} (ID: {harvester.id})"
-            )
+            console.print(f"\n[bold cyan]Harvester:[/bold cyan] {harvester.name} (ID: {harvester.id})")
             console.print(f"  [yellow]Loader:[/yellow] {harvester.loader}")
-            console.print(
-                f"  [yellow]Transformers:[/yellow] {indented_json(harvester.transformers)}"
-            )
-            console.print(
-                f"  [yellow]Writers:[/yellow] {indented_json(harvester.writers)}"
-            )
-            console.print(
-                f"  [yellow]Harvest Managers:[/yellow] {indented_json(harvester.harvest_managers)}"
-            )
+            console.print(f"  [yellow]Transformers:[/yellow] {indented_json(harvester.transformers)}")
+            console.print(f"  [yellow]Writers:[/yellow] {indented_json(harvester.writers)}")
+            console.print(f"  [yellow]Harvest Managers:[/yellow] {indented_json(harvester.harvest_managers)}")
             console.print(f"  [yellow]Created:[/yellow] {harvester.created}")
             console.print(f"  [yellow]Updated:[/yellow] {harvester.updated}")
 
@@ -126,12 +122,8 @@ def list_harvesters(json_output: bool) -> None:
 @click.option("--base-url", required=True, help="OAI-PMH base URL")
 @click.option("--metadata-prefix", required=True, help="Metadata prefix (e.g., oai_dc)")
 @click.option("--setspec", default="", help="Set specification")
-@click.option(
-    "--loader", default="oai-pmh", help="Loader definition (default: oai-pmh)"
-)
-@click.option(
-    "--model", help="Model name (automatically sets transformers and writers)"
-)
+@click.option("--loader", default="oai-pmh", help="Loader definition (default: oai-pmh)")
+@click.option("--model", help="Model name (automatically sets transformers and writers)")
 @click.option(
     "--transformer",
     multiple=True,
@@ -150,7 +142,7 @@ def list_harvesters(json_output: bool) -> None:
 @click.option("--comment", default="", help="Comment")
 @with_appcontext
 def create_harvester(  # noqa: PLR0913  # many parameters
-    id: str,
+    id: str,  # noqa: A002 # shadows built-in
     name: str,
     base_url: str,
     metadata_prefix: str,
@@ -187,16 +179,12 @@ def create_harvester(  # noqa: PLR0913  # many parameters
     }
 
     try:
-        harvester = current_oai_harvester_service.create(
-            system_identity, harvester_data
-        )
+        current_oai_harvester_service.create(system_identity, harvester_data)
         db.session.commit()
         current_oai_harvester_service.indexer.refresh()
 
         console = Console()
-        console.print(
-            f"[green]✓[/green] Harvester '{name}' created successfully with ID: {id}"
-        )
+        console.print(f"[green]✓[/green] Harvester '{name}' created successfully with ID: {id}")
     except Exception as e:
         db.session.rollback()
         click.echo(f"Error creating harvester: {e}", err=True)
@@ -210,9 +198,7 @@ def create_harvester(  # noqa: PLR0913  # many parameters
 @click.option("--metadata-prefix", help="Metadata prefix (e.g., oai_dc)")
 @click.option("--setspec", help="Set specification")
 @click.option("--loader", help="Loader definition")
-@click.option(
-    "--model", help="Model name (automatically sets transformers and writers)"
-)
+@click.option("--model", help="Model name (automatically sets transformers and writers)")
 @click.option(
     "--transformer",
     multiple=True,
@@ -251,9 +237,7 @@ def update_harvester(  # noqa: PLR0913  # many parameters
 
     try:
         # Read existing harvester
-        update_data = current_oai_harvester_service.read(
-            system_identity, harvester_id
-        ).to_dict()
+        update_data = current_oai_harvester_service.read(system_identity, harvester_id).to_dict()
 
         # Handle model option to auto-generate transformers and writers
         transformers = list(transformer)
@@ -286,9 +270,7 @@ def update_harvester(  # noqa: PLR0913  # many parameters
         current_oai_harvester_service.indexer.refresh()
 
         console = Console()
-        console.print(
-            f"[green]✓[/green] Harvester '{harvester_id}' updated successfully"
-        )
+        console.print(f"[green]✓[/green] Harvester '{harvester_id}' updated successfully")
     except Exception as e:
         db.session.rollback()
         click.echo(f"Error updating harvester: {e}", err=True)
@@ -313,9 +295,7 @@ def delete_harvester(harvester_id: str, yes: bool) -> None:
         current_oai_harvester_service.indexer.refresh()
 
         console = Console()
-        console.print(
-            f"[green]✓[/green] Harvester '{harvester_id}' deleted successfully"
-        )
+        console.print(f"[green]✓[/green] Harvester '{harvester_id}' deleted successfully")
     except Exception as e:
         db.session.rollback()
         click.echo(f"Error deleting harvester: {e}", err=True)

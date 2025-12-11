@@ -15,9 +15,7 @@ from invenio_pidstore.errors import PIDDoesNotExistError
 from oarepo_oaipmh_harvester.proxies import current_oai_harvester_service
 
 
-def test_harvester_crud(
-    db, app, search, search_clear, user_with_administration_rights, client
-):
+def test_harvester_crud(db, app, search, search_clear, user_with_administration_rights, client):
     harvester_data = {
         "id": "test",
         "name": "Test Harvester",
@@ -74,9 +72,7 @@ def test_harvester_crud(
     assert response_data["harvest_managers"] == harvester_data["harvest_managers"]
     assert response_data["comment"] == harvester_data["comment"]
 
-    found_harvesters = current_oai_harvester_service.search(
-        system_identity, {"q": "Test"}
-    ).to_dict()
+    found_harvesters = current_oai_harvester_service.search(system_identity, {"q": "Test"}).to_dict()
     assert found_harvesters["hits"]["total"] == 1
     assert found_harvesters["hits"]["hits"][0]["id"] == harvester_data["id"]
 
@@ -91,9 +87,7 @@ def test_harvester_crud(
         "name": "Updated Harvester",
         "comment": "This is an updated test harvester.",
     }
-    updated_harvester = current_oai_harvester_service.update(
-        system_identity, harvester.id, updated_data
-    ).to_dict()
+    updated_harvester = current_oai_harvester_service.update(system_identity, harvester.id, updated_data).to_dict()
     current_oai_harvester_service.indexer.refresh()
     assert updated_harvester["name"] == updated_data["name"]
     assert updated_harvester["comment"] == updated_data["comment"]
@@ -116,9 +110,7 @@ def test_harvester_crud(
     read_harvester = current_oai_harvester_service.read(system_identity, harvester.id)
     read_harvester_dict = read_harvester.to_dict()
     assert read_harvester_dict["name"] == "Updated Harvester via API"
-    assert (
-        read_harvester_dict["comment"] == "This is an updated test harvester via API."
-    )
+    assert read_harvester_dict["comment"] == "This is an updated test harvester via API."
 
     current_oai_harvester_service.delete(system_identity, harvester.id)
     current_oai_harvester_service.indexer.refresh()

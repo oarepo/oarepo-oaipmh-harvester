@@ -60,16 +60,10 @@ class OARepoOAIHarvesterExt:
             app.config["VOCABULARIES_DATASTREAM_TRANSFORMERS"] = {
                 **vocabularies_config.VOCABULARIES_DATASTREAM_TRANSFORMERS
             }
-        app.config["VOCABULARIES_DATASTREAM_TRANSFORMERS"].update(
-            harvester_config.VOCABULARIES_DATASTREAM_TRANSFORMERS
-        )
+        app.config["VOCABULARIES_DATASTREAM_TRANSFORMERS"].update(harvester_config.VOCABULARIES_DATASTREAM_TRANSFORMERS)
         if "VOCABULARIES_DATASTREAM_WRITERS" not in app.config:
-            app.config["VOCABULARIES_DATASTREAM_WRITERS"] = {
-                **vocabularies_config.VOCABULARIES_DATASTREAM_WRITERS
-            }
-        app.config["VOCABULARIES_DATASTREAM_WRITERS"].update(
-            harvester_config.VOCABULARIES_DATASTREAM_WRITERS
-        )
+            app.config["VOCABULARIES_DATASTREAM_WRITERS"] = {**vocabularies_config.VOCABULARIES_DATASTREAM_WRITERS}
+        app.config["VOCABULARIES_DATASTREAM_WRITERS"].update(harvester_config.VOCABULARIES_DATASTREAM_WRITERS)
 
         app.config.setdefault(
             "OAI_HARVESTER_DEFAULT_BATCH_SIZE",
@@ -113,9 +107,7 @@ class OARepoOAIHarvesterExt:
         if config_cls is None:
             raise RuntimeError("OAI_RECORD_SERVICE_CONFIG is not configured")
         if not issubclass(config_cls, OAIRecordServiceConfig):
-            raise TypeError(
-                "OAI_RECORD_SERVICE_CONFIG is not a subclass of OAIRecordServiceConfig"
-            )
+            raise TypeError("OAI_RECORD_SERVICE_CONFIG is not a subclass of OAIRecordServiceConfig")
         return cast("OAIRecordServiceConfig", config_cls.build(self.app))
 
     @cached_property
@@ -150,9 +142,7 @@ class OARepoOAIHarvesterExt:
         if resource_cls is None:
             raise RuntimeError("OAI_RECORD_RESOURCE is not configured")
         if not issubclass(resource_cls, OAIRecordResource):
-            raise TypeError(
-                "OAI_RECORD_RESOURCE is not a subclass of OAIRecordResource"
-            )
+            raise TypeError("OAI_RECORD_RESOURCE is not a subclass of OAIRecordResource")
         return cast(
             "OAIRecordResource",
             resource_cls(self.oai_record_resource_config, self.oai_record_service),
@@ -170,9 +160,7 @@ class OARepoOAIHarvesterExt:
         if config_cls is None:
             raise RuntimeError("OAI_HARVESTER_SERVICE_CONFIG is not configured")
         if not issubclass(config_cls, OAIHarvesterServiceConfig):
-            raise TypeError(
-                "OAI_HARVESTER_SERVICE_CONFIG is not a subclass of OAIHarvesterServiceConfig"
-            )
+            raise TypeError("OAI_HARVESTER_SERVICE_CONFIG is not a subclass of OAIHarvesterServiceConfig")
         return cast("OAIHarvesterServiceConfig", config_cls.build(self.app))
 
     @cached_property
@@ -187,12 +175,8 @@ class OARepoOAIHarvesterExt:
         if service_cls is None:
             raise RuntimeError("OAI_HARVESTER_SERVICE is not configured")
         if not issubclass(service_cls, OAIHarvesterService):
-            raise TypeError(
-                "OAI_HARVESTER_SERVICE is not a subclass of OAIHarvesterService"
-            )
-        return cast(
-            "OAIHarvesterService", service_cls(self.oai_harvester_service_config)
-        )
+            raise TypeError("OAI_HARVESTER_SERVICE is not a subclass of OAIHarvesterService")
+        return cast("OAIHarvesterService", service_cls(self.oai_harvester_service_config))
 
     @cached_property
     def oai_harvester_resource_config(self) -> OAIHarvesterResourceConfig:
@@ -206,9 +190,7 @@ class OARepoOAIHarvesterExt:
         if config_cls is None:
             raise RuntimeError("OAI_HARVESTER_RESOURCE_CONFIG is not configured")
         if not issubclass(config_cls, OAIHarvesterResourceConfig):
-            raise TypeError(
-                "OAI_HARVESTER_RESOURCE_CONFIG is not a subclass of OAIHarvesterResourceConfig"
-            )
+            raise TypeError("OAI_HARVESTER_RESOURCE_CONFIG is not a subclass of OAIHarvesterResourceConfig")
         return cast("OAIHarvesterResourceConfig", config_cls())
 
     @cached_property
@@ -223,14 +205,10 @@ class OARepoOAIHarvesterExt:
         if resource_cls is None:
             raise RuntimeError("OAI_HARVESTER_RESOURCE is not configured")
         if not issubclass(resource_cls, OAIHarvesterResource):
-            raise TypeError(
-                "OAI_HARVESTER_RESOURCE is not a subclass of OAIHarvesterResource"
-            )
+            raise TypeError("OAI_HARVESTER_RESOURCE is not a subclass of OAIHarvesterResource")
         return cast(
             "OAIHarvesterResource",
-            resource_cls(
-                self.oai_harvester_resource_config, self.oai_harvester_service
-            ),
+            resource_cls(self.oai_harvester_resource_config, self.oai_harvester_service),
         )
 
 

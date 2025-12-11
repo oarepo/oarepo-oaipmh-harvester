@@ -64,9 +64,7 @@ class OAIDeserializer(DeserializerMixin):
             tag = etree.QName(elem).localname
             if tag not in metadata:
                 metadata[tag] = []
-            metadata[tag].append(
-                (elem.get("{http://www.w3.org/XML/1998/namespace}lang"), elem.text)
-            )
+            metadata[tag].append((elem.get("{http://www.w3.org/XML/1998/namespace}lang"), elem.text))
 
         metadata = self.process_metadata(metadata)
         return {
@@ -86,9 +84,7 @@ class OAIDeserializer(DeserializerMixin):
                 continue
             spec = self.FIELD_SPECS[field]
             if not spec["repeatable"] and len(normalized) > 1:
-                raise ValueError(
-                    f"dc:{field} is not repeatable but {len(normalized)} instances were provided."
-                )
+                raise ValueError(f"dc:{field} is not repeatable but {len(normalized)} instances were provided.")
             processed[field] = self._convert_entries(normalized, spec)
         return processed
 
@@ -201,12 +197,8 @@ def test_model():
 
 @pytest.fixture(scope="module")
 def app_config(app_config, test_model):
-    app_config["RECORDS_REFRESOLVER_CLS"] = (
-        "invenio_records.resolver.InvenioRefResolver"
-    )
-    app_config["RECORDS_REFRESOLVER_STORE"] = (
-        "invenio_jsonschemas.proxies.current_refresolver_store"
-    )
+    app_config["RECORDS_REFRESOLVER_CLS"] = "invenio_records.resolver.InvenioRefResolver"
+    app_config["RECORDS_REFRESOLVER_STORE"] = "invenio_jsonschemas.proxies.current_refresolver_store"
     app_config["CELERY_TASK_ALWAYS_EAGER"] = True
     # disable session protection for tests to avoid issues with Flask-Login
     app_config["SESSION_PROTECTION"] = None

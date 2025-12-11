@@ -71,10 +71,7 @@ def test_service(app, test_model):
     return current_runtime.models["test"].service
 
 
-def test_harvest_task(
-    app, db, search_clear, test_model, test_service, location, harvester, mocker
-):
-
+def test_harvest_task(app, db, search_clear, test_model, test_service, location, harvester, mocker):
     mocker.patch(
         "oaipmh_scythe.client.Scythe._request",
         side_effect=OAIPMHResponses(Path(__file__).parent / "oai_responses"),
@@ -85,9 +82,7 @@ def test_harvest_task(
     test_service.indexer.refresh()
     results = test_service.search(system_identity).to_dict()
     assert results["hits"]["total"] == 1
-    assert results["hits"]["hits"][0]["metadata"]["title"] == {
-        "value": "Record 1 updated"
-    }
+    assert results["hits"]["hits"][0]["metadata"]["title"] == {"value": "Record 1 updated"}
 
     current_oai_record_service.indexer.refresh()
     current_oai_record_service.search(system_identity).to_dict()

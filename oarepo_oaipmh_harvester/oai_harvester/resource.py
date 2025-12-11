@@ -56,16 +56,10 @@ class AdministrationDetailJSONSerializer(JSONSerializer):
         obj_list = [self._convert_to_administration_detail(obj) for obj in obj_list]
         return super().serialize_object_list(obj_list)  # type: ignore[no-any-return]
 
-    def _convert_to_administration_detail(
-        self, serialized_harvester: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _convert_to_administration_detail(self, serialized_harvester: dict[str, Any]) -> dict[str, Any]:
         serialized_harvester = {**serialized_harvester}
-        serialized_harvester["transformers"] = data_to_html_yaml(
-            serialized_harvester["transformers"]
-        )
-        serialized_harvester["writers"] = data_to_html_yaml(
-            serialized_harvester["writers"]
-        )
+        serialized_harvester["transformers"] = data_to_html_yaml(serialized_harvester["transformers"])
+        serialized_harvester["writers"] = data_to_html_yaml(serialized_harvester["writers"])
         # TODO: link to jobs here
         return serialized_harvester
 
