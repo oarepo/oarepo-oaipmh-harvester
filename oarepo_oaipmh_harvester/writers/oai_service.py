@@ -162,6 +162,7 @@ class OAIServiceWriter(BaseWriter):
                         dict_lookup(written_data, self._pid_field),
                         uow=uow,
                     )
+                uow.commit()
         except Exception as e:  # noqa: BLE001 to catch all possible errors
             # we can't know the state of the db connection, rollback is a safe bet
             db.session.rollback()
@@ -230,7 +231,7 @@ class OAIServiceWriter(BaseWriter):
 
         # store the original and transformed data
         oai_record.original_data = original_data
-        oai_record.transformed_data = transformed_data
+        oai_record.transformed_data = transformed_data or {}
 
         db.session.add(oai_record)
         db.session.commit()

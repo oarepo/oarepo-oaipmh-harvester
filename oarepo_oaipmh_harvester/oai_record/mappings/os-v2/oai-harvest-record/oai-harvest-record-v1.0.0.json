@@ -48,6 +48,9 @@
                     "message": {
                         "type": "keyword"
                     },
+                    "type": {
+                        "type": "keyword"
+                    },
                     "location": {
                         "type": "keyword"
                     }
