@@ -74,7 +74,7 @@ class OAIPMHListView(OAIHarvesterPermissionsMixin, AdminResourceListView):
     name = "oarepo_oaipmh_harvesters"
     url = "/oarepo/harvesters"
 
-    resource_config = "oai_harvester_resource_config"
+    resource_config = "oai_harvester_resource"
     search_request_headers: Mapping[str, str] = {"Accept": "application/json"}
     title = "OAI-PMH Harvesters"
     category = "Site management"
@@ -100,7 +100,7 @@ class OAIPMHListView(OAIHarvesterPermissionsMixin, AdminResourceListView):
         "name": {"text": _("Name"), "order": 1},
         "id": {"text": _("Code"), "order": 2},
         "baseurl": {"text": _("Base URL"), "order": 3},
-        "metadataprefix": {"text": _("Metadata prefix"), "order": 4},
+        "metadata_prefix": {"text": _("Metadata prefix"), "order": 4},
     }
 
     search_config_name = "OAI_HARVESTER_SEARCH"
@@ -117,7 +117,7 @@ class OAIPMHDetailView(OAIHarvesterPermissionsMixin, AdminResourceDetailView):
     api_endpoint = "/oai/harvest/harvesters/"
     request_headers: Mapping[str, str] = {"Accept": "application/vnd.inveniordm.v1+json"}
     name = "oarepo_oaipmh_harvesters_detail"
-    resource_config = "oai_harvester_resource_config"
+    resource_config = "oai_harvester_resource"
     title = "OAI-PMH Harvesters"
     extension_name = "oarepo_oaipmh_harvester"
 
@@ -138,8 +138,8 @@ class OAIPMHDetailView(OAIHarvesterPermissionsMixin, AdminResourceDetailView):
     item_field_list: Mapping[str, dict[str, Any]] = {
         "name": {"text": _("Name"), "order": 1},
         "id": {"text": _("Code"), "order": 2},
-        "setspecs": {"text": _("Set specification"), "order": 4},
-        "metadataprefix": {"text": _("Metadata prefix"), "order": 5},
+        "setspec": {"text": _("Set specification"), "order": 4},
+        "metadata_prefix": {"text": _("Metadata prefix"), "order": 5},
         "baseurl": {"text": _("Base URL"), "order": 6},
         "loader": {"text": _("Loader"), "order": 7},
         "writers": {"text": _("Writer"), "order": 8, "escape": True},
@@ -182,14 +182,14 @@ class OAIHarvesterFormMixin:
             "text": _("Base URL"),
             "required": True,
         },
-        "metadataprefix": {
+        "metadata_prefix": {
             "order": 4,
-            "text": _("Metadataprefix"),
+            "text": _("Metadata prefix"),
             "required": True,
         },
-        "setspecs": {
+        "setspec": {
             "order": 6,
-            "text": _("Setspecs"),
+            "text": _("Set specification"),
             "required": False,
         },
         "loader": {
@@ -234,7 +234,7 @@ class OAIHarvesterFormMixin:
         }
         ret["writers"] = {"type": "string"}
         ret["harvest_managers"] = {"type": "string"}
-        ret["setspecs"] = {"type": "string"}
+        ret["setspec"] = {"type": "string"}
         return ret
 
 
@@ -243,7 +243,7 @@ class OAIPMHEditView(OAIHarvesterPermissionsMixin, OAIHarvesterFormMixin, AdminF
 
     name = "oarepo_oaipmh_edit"
     url = "/oarepo/harvesters/<pid_value>/edit"
-    resource_config = "oai_harvester_resource_config"
+    resource_config = "oai_harvester_resource"
     pid_path = "id"
     api_endpoint = "/oai/harvest/harvesters/"
     title = "Edit OAI-PMH harvester"
@@ -257,7 +257,7 @@ class OAIPMHCreateView(OAIHarvesterPermissionsMixin, OAIHarvesterFormMixin, Admi
 
     name = "oarepo_oaipmh_create"
     url = "/oarepo/harvesters/create"
-    resource_config = "oai_harvester_resource_config"
+    resource_config = "oai_harvester_resource"
     pid_path = "id"
     api_endpoint = "/oai/harvest/harvesters/"
     title = "Create OAI-PMH Harvester"

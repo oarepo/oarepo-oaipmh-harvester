@@ -26,10 +26,11 @@ dependencies = [
     "invenio-jobs>=6.0.0,<7.0.0",
     "invenio-oaipmh-scythe>=0.13.0",
     "json5",
+    "rich", # for cmdline pretty printing
     # temporary upper bound to avoid issues with 1.0.0devx releases of httpx
     # we use dev releases of our own packages and it means that a dev release
     # of httpx 1.0 gets installed which has api changes that break things
-    "httpx<=0.9999" 
+    "httpx<=0.9999",
 ]
 
 [project.urls]
@@ -105,3 +106,6 @@ oarepo_oaipmh_harvester = "oarepo_oaipmh_harvester.ext:finalize_apps"
 
 [project.entry-points."invenio_access.actions"]
 harvest_action = "oarepo_oaipmh_harvester.permissions:harvest_action"
+
+[project.entry-points."flask.commands"]
+oai = "oarepo_oaipmh_harvester.cli:oai_cli"

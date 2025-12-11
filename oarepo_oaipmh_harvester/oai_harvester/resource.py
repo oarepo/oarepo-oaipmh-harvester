@@ -105,6 +105,8 @@ class OAIHarvesterResource(RecordResource):
         return [
             route("GET", routes["list"], self.search),
             route("GET", routes["item"], self.read),
+            route("PUT", routes["item"], self.update),
+            route("DELETE", routes["item"], self.delete),
             route("POST", routes["harvest"], self.harvest),
         ]
 
@@ -125,7 +127,7 @@ class OAIHarvesterResource(RecordResource):
     def read(self) -> tuple[dict[str, Any], int]:
         """Read an oai harvester."""
         item = self.service.read(
-            id_=resource_requestctx.view_args["id"],
+            id_=resource_requestctx.view_args["pid_value"],
             identity=g.identity,
         )
         return item.to_dict(), 200
@@ -135,7 +137,7 @@ class OAIHarvesterResource(RecordResource):
     def harvest(self) -> tuple[dict[str, Any], int]:
         """Re-harvest the source."""
         item = self.service.harvest(
-            id_=resource_requestctx.view_args["id"],
+            id_=resource_requestctx.view_args["pid_value"],
             identity=g.identity,
         )
         return item.to_dict(), 200
