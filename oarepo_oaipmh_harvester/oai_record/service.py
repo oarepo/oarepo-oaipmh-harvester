@@ -205,8 +205,8 @@ class OAIRecordService(RecordService):
     @override
     def rebuild_index(self, identity: Identity, uow: UnitOfWork | None = None) -> bool:
         """Reindex all oai_records managed by this service."""
-        oai_records = db.session.query(OAIHarvestedRecord.id).yield_per(1000)
-        self.indexer.bulk_index([u.id for u in oai_records])
+        oai_records = db.session.query(OAIHarvestedRecord.oai_identifier).yield_per(1000)
+        self.indexer.bulk_index([u.oai_identifier for u in oai_records])
         return True
 
     def harvest(self, identity: Identity, id_: str) -> RecordItem:
