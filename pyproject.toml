@@ -56,8 +56,9 @@ oarepo14=[
 [tool.hatch.version]
 path = "oarepo_oaipmh_harvester/__init__.py"
 
-[project.entry-points."invenio_jobs.jobs"]
-harvest_oaipmh_records = "oarepo_oaipmh_harvester.jobs:OAIHarvestJob"
+# jobs are created dynamically for now
+# [project.entry-points."invenio_jobs.jobs"]
+# harvest_oaipmh_records = "oarepo_oaipmh_harvester.jobs:OAIHarvestJob"
 
 [project.entry-points."invenio_db.alembic"]
 oarepo_oaipmh_harvester = "oarepo_oaipmh_harvester:alembic"

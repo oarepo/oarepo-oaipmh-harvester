@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 @shared_task
-def harvest_oaipmh_records(*, harvester_id: str, since: datetime | None = None, batch_size: int | None = None) -> None:
+def harvest_oaipmh_records(*, harvester_id: str, since: datetime | None = None, batch_size: int = 10) -> None:
     """Harvest OAI-PMH records for the given harvester."""
     harvester = OAIHarvesterAggregate.get_record(harvester_id)
     readers_config = create_readers(harvester, since=since)

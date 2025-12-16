@@ -14,13 +14,16 @@ from typing import TYPE_CHECKING, Any
 
 from invenio_db import db
 from invenio_jobs.jobs import JobType
-from invenio_jobs.models import Job
 from invenio_jobs.proxies import current_jobs
+
+from oarepo_oaipmh_harvester.oai_harvester.models import OAIHarvester
 
 from .tasks import harvest_oaipmh_records
 
 if TYPE_CHECKING:
     from datetime import datetime
+
+    from invenio_jobs.models import Job
 
 
 class OAIHarvestJob(JobType):
@@ -61,7 +64,7 @@ class OAIHarvestJob(JobType):
         }
 
 
-def register_oaipmh_job(job_id: str) -> None:
+def register_oaipmh_job(harvester_id: str) -> None:
     """Register a new OAI-PMH harvester job.
 
     Note: current invenio-jobs does not support job parameters, only run parameters.
@@ -73,6 +76,7 @@ def register_oaipmh_job(job_id: str) -> None:
     inside the finalize_apps function.
     """
     # create and register the job
+    job_id = f"harvest_oaipmh_records_{harvester_id}"
     current_jobs.registry._jobs.pop(job_id, None)  # unregister if exists # noqa SLF001
     current_jobs.registry.register(
         type(
@@ -80,6 +84,7 @@ def register_oaipmh_job(job_id: str) -> None:
             (OAIHarvestJob,),
             {
                 "id": job_id,
+                "title": f"OAI Harvester Job for harvester {harvester_id}",
             },
         )
     )
@@ -94,9 +99,8 @@ def unregister_oaipmh_job(job_id: str) -> None:
 def register_current_harvesters() -> None:
     """Register jobs for all harvesters stored in the database."""
     try:
-        for job in db.session.query(Job).filter(Job.task.startswith("harvest_oaipmh_records_")):
-            task = job.task
-            register_oaipmh_job(task)
+        for harvester in db.session.query(OAIHarvester).all():
+            register_oaipmh_job(harvester.id)
     # An exception might happen for example during invenio db init when
     # the application is started but the database is not yet initialized.
     # We ignore these exceptions with a general except clause, as different
