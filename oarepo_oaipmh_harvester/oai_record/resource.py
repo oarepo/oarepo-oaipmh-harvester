@@ -89,6 +89,8 @@ class OAIRecordResourceConfig(RecordResourceConfig):
 
     blueprint_name = "oai_records"
     url_prefix = "/oai/harvest/records"
+    api_service = "oai-harvest-record"
+
     routes: Mapping[str, Any] = {
         "list": "",
         "item": "/<path:id>",

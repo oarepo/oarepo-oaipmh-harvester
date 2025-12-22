@@ -41,7 +41,7 @@ def oai_record_permissions_decorator[**P, R_co](
         # get all harvesters and their managers
         manager_needs = set()
         for md in OAIHarvester.query.all():
-            for manager in (md.json or {}).get("harvest_managers", []):
+            for manager in md.harvest_managers or []:
                 if "user" in manager:
                     manager_needs.add(UserNeed(manager["user"]))
         oai_record_permission = Permission(administration_access_action, *manager_needs)  # type: ignore[reportArgumentType]
@@ -68,7 +68,7 @@ class RecordListView(OAIHarvesterPermissionsMixin, AdminResourceListView):
     name = "oarepo_oaipmh_harvest_records"
     url = "/oarepo/harvest/records"
 
-    resource_config = "oai_record_resource_config"
+    resource_config = "oai_record_resource"
     search_request_headers: Mapping[str, str] = {"Accept": "application/invenio-administration-detail+json"}
     title = "OAI-PMH Harvester Records"
     category = "Site management"
@@ -78,11 +78,11 @@ class RecordListView(OAIHarvesterPermissionsMixin, AdminResourceListView):
     menu_label = "OAI-PMH Harvester Records"
 
     actions: Mapping[str, dict[str, Any]] = {
-        "harvest": {
-            "text": "Re-harvest",
-            "order": 1,
-            "payload_schema": None,
-        }
+        # invenio OAI harvester does not support re-harvesting individual items
+        # "harvest": {                # noqa: ERA001
+        #     "text": "Re-harvest",   # noqa: ERA001
+        #     "order": 1,        # noqa: ERA001
+        #     "payload_schema": None,   # noqa: ERA001
     }
 
     display_search = True
@@ -129,11 +129,11 @@ class RecordDetailView(OAIHarvesterPermissionsMixin, AdminResourceDetailView):
     pid_path = "id"
 
     actions: Mapping[str, dict[str, Any]] = {
-        "harvest": {
-            "text": "Re-harvest",
-            "order": 1,
-            "payload_schema": None,
-        }
+        # invenio OAI harvester does not support re-harvesting individual items
+        # "harvest": {                  # noqa: ERA001
+        #     "text": "Re-harvest",     # noqa: ERA001
+        #     "order": 1,               # noqa: ERA001
+        #     "payload_schema": None,   # noqa: ERA001
     }
 
     item_field_list: Mapping[str, dict[str, Any]] = {
