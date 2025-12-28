@@ -14,14 +14,17 @@ import json
 import textwrap
 from typing import Any
 
+import arrow
 import click
 from flask.cli import with_appcontext
 from invenio_access.permissions import system_identity
 from invenio_accounts.models import User
 from invenio_db import db
+from invenio_jobs.proxies import current_runs_service
 from rich.console import Console
 from rich.table import Table
 
+from oarepo_oaipmh_harvester.jobs import get_oaipmh_job
 from oarepo_oaipmh_harvester.oai_harvester.models import OAIHarvester
 from oarepo_oaipmh_harvester.proxies import current_oai_harvester_service
 
@@ -300,3 +303,22 @@ def delete_harvester(harvester_id: str, yes: bool) -> None:
         db.session.rollback()
         click.echo(f"Error deleting harvester: {e}", err=True)
         raise
+
+
+@oai_cli.command("harvest")
+@click.argument("harvester_id")
+@click.option("--since", help="Harvest records modified since this date (ISO format)")
+@click.option("--use-job", is_flag=True, help="Use job to perform harvesting")
+@with_appcontext
+def harvest_harvester(harvester_id: str, since: str | None, use_job: bool = False) -> None:
+    """Trigger harvesting for an OAI-PMH harvester."""
+    if use_job:
+        job = get_oaipmh_job(harvester_id)
+        current_runs_service.create(system_identity, job.id, params={"since": since})
+    else:
+        from oarepo_oaipmh_harvester.tasks import harvest_oaipmh_records
+
+        harvest_oaipmh_records(
+            harvester_id=harvester_id,
+            since=arrow.get(since).datetime if since else None,
+        )

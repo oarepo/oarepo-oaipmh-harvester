@@ -24,10 +24,16 @@ if TYPE_CHECKING:
 
 
 @shared_task
-def harvest_oaipmh_records(*, harvester_id: str, since: datetime | None = None, batch_size: int = 10) -> None:
+def harvest_oaipmh_records(
+    *,
+    harvester_id: str,
+    oai_ids: list[str] | None = None,
+    since: datetime | None = None,
+    batch_size: int = 10,
+) -> None:
     """Harvest OAI-PMH records for the given harvester."""
     harvester = OAIHarvesterAggregate.get_record(harvester_id)
-    readers_config = create_readers(harvester, since=since)
+    readers_config = create_readers(harvester, since=since, oai_ids=oai_ids)
     transformers_config = create_transformers(harvester)
     writers_config = create_writers(harvester)
     datastream = DataStreamFactory.create(
@@ -58,7 +64,11 @@ def parse_config(config: str) -> tuple[str, dict]:
     return type_, args
 
 
-def create_readers(harvester: OAIHarvesterAggregate, since: datetime | None = None) -> dict:
+def create_readers(
+    harvester: OAIHarvesterAggregate,
+    since: datetime | None = None,
+    oai_ids: list[str] | None = None,
+) -> dict:
     """Create readers config for the harvester."""
     reader_type, reader_args = parse_config(harvester.loader or "oai-pmh")
     if "base_url" not in reader_args:
@@ -69,6 +79,8 @@ def create_readers(harvester: OAIHarvesterAggregate, since: datetime | None = No
         reader_args["set"] = harvester.setspec
     if "from_date" not in reader_args and since:
         reader_args["from_date"] = since.isoformat()
+    if oai_ids is not None:
+        reader_args["identifiers"] = oai_ids
     reader_args["harvester_id"] = harvester.id
     return {
         "type": reader_type,

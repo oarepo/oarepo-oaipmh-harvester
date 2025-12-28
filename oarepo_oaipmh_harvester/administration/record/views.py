@@ -78,11 +78,11 @@ class RecordListView(OAIHarvesterPermissionsMixin, AdminResourceListView):
     menu_label = "OAI-PMH Harvester Records"
 
     actions: Mapping[str, dict[str, Any]] = {
-        # invenio OAI harvester does not support re-harvesting individual items
-        # "harvest": {                # noqa: ERA001
-        #     "text": "Re-harvest",   # noqa: ERA001
-        #     "order": 1,        # noqa: ERA001
-        #     "payload_schema": None,   # noqa: ERA001
+        "harvest": {
+            "text": "Re-harvest",
+            "order": 1,
+            "payload_schema": None,
+        }
     }
 
     display_search = True
@@ -118,7 +118,7 @@ class RecordDetailView(OAIHarvesterPermissionsMixin, AdminResourceDetailView):
     api_endpoint = "/oai/harvest/records/"
     request_headers: Mapping[str, str] = {"Accept": "application/invenio-administration-detail+json"}
     name = "oarepo_oaipmh_records_detail"
-    resource_config = "oai_record_resource_config"
+    resource_config = "oai_record_resource"
     title = "OAI-PMH Harvester Record"
     extension_name = "oarepo_oaipmh_harvester"
 
@@ -129,11 +129,11 @@ class RecordDetailView(OAIHarvesterPermissionsMixin, AdminResourceDetailView):
     pid_path = "id"
 
     actions: Mapping[str, dict[str, Any]] = {
-        # invenio OAI harvester does not support re-harvesting individual items
-        # "harvest": {                  # noqa: ERA001
-        #     "text": "Re-harvest",     # noqa: ERA001
-        #     "order": 1,               # noqa: ERA001
-        #     "payload_schema": None,   # noqa: ERA001
+        "harvest": {
+            "text": "Re-harvest",
+            "order": 1,
+            "payload_schema": None,
+        }
     }
 
     item_field_list: Mapping[str, dict[str, Any]] = {
