@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from invenio_db import db
 from invenio_jobs.jobs import JobType
+from invenio_jobs.models import Job
 from invenio_jobs.proxies import current_jobs
 
 from oarepo_oaipmh_harvester.oai_harvester.models import OAIHarvester
@@ -22,8 +23,6 @@ from .tasks import harvest_oaipmh_records
 
 if TYPE_CHECKING:
     from datetime import datetime
-
-    from invenio_jobs.models import Job
 
 
 class OAIHarvestJob(JobType):
@@ -76,7 +75,7 @@ def register_oaipmh_job(harvester_id: str) -> None:
     inside the finalize_apps function.
     """
     # create and register the job
-    job_id = f"harvest_oaipmh_records_{harvester_id}"
+    job_id = get_oaipmh_job_id(harvester_id)
     current_jobs.registry._jobs.pop(job_id, None)  # unregister if exists # noqa SLF001
     current_jobs.registry.register(
         type(
@@ -88,6 +87,18 @@ def register_oaipmh_job(harvester_id: str) -> None:
             },
         )
     )
+
+
+def get_oaipmh_job_id(harvester_id: str) -> str:
+    """Get the job ID for the given harvester ID."""
+    return f"harvest_oaipmh_records_{harvester_id}"
+
+
+def get_oaipmh_job(harvester_id: str) -> Job:
+    """Get the job for the given harvester ID."""
+    job_type_id = get_oaipmh_job_id(harvester_id)
+    job_type: JobType = current_jobs.registry.get(job_type_id)
+    return db.session.query(Job).filter_by(task=job_type.task).one()
 
 
 def unregister_oaipmh_job(job_id: str) -> None:

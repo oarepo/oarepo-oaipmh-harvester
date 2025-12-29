@@ -32,8 +32,8 @@ def harvester(app, db, search_clear):
         "metadata_prefix": "oai_dc",
         "setspec": "",
         "loader": "oai-pmh",
-        "transformers": ['oai-import{model:"test"}'],
-        "writers": ['oai-service{model:"test",update:true}'],
+        "transformers": ['oai-import{"model":"test"}'],
+        "writers": ['oai-service{"model":"test","update":true,"publish":false}'],
         "harvest_managers": ["1"],
         "comment": "This is a test harvester.",
     }
@@ -76,6 +76,8 @@ def test_harvest_task(app, db, search_clear, test_model, test_service, location,
         "oaipmh_scythe.client.Scythe._request",
         side_effect=OAIPMHResponses(Path(__file__).parent / "oai_responses"),
     )
+    from invenio_vocabularies.datastreams.readers import OAIPMHReader  # noqa
+
     harvest_oaipmh_records(harvester_id=harvester, since=None, batch_size=1)
     process_bulk_queue(indexer_name=test_service.config.service_id)
     process_bulk_queue(indexer_name="oai-harvest-record")

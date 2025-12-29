@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import json
 from typing import TYPE_CHECKING, Any, cast, override
@@ -18,6 +19,7 @@ from flask import current_app
 from invenio_access.permissions import system_identity
 from invenio_db import db
 from invenio_db.uow import UnitOfWork
+from invenio_pidstore.errors import PersistentIdentifierError
 from invenio_records.dictutils import dict_lookup
 from invenio_vocabularies.datastreams.writers import BaseWriter
 from marshmallow import ValidationError
@@ -30,8 +32,13 @@ from oarepo_oaipmh_harvester.proxies import current_oai_record_service
 
 if TYPE_CHECKING:
     from flask_principal import Identity
+    from invenio_drafts_resources.services.records import (
+        RecordService as DraftRecordService,
+    )
+    from invenio_records_resources.records.api import Record
     from invenio_records_resources.services.records import RecordService
     from invenio_vocabularies.datastreams.datastreams import StreamEntry
+
 
 # TODO: the writer does not solve the case of dangling draft records
 
@@ -73,7 +80,7 @@ class OAIServiceWriter(BaseWriter):
         return current_runtime.models[self._model].service
 
     @override
-    def write(  # noqa # too complex
+    def write(  # too complex
         self,
         stream_entry: StreamEntry,
         *args: Any,
@@ -91,45 +98,30 @@ class OAIServiceWriter(BaseWriter):
         oai_deleted = stream_entry.entry["oai_record"].header.deleted
 
         # 1. check if there is an OAI record already
-        oai_record = db.session.query(OAIHarvestedRecord).filter_by(oai_identifier=oai_identifier).one_or_none()
+        oai_record = self._get_oai_record(oai_identifier)
 
-        # 2. if so
-        pid_value = None
-        if oai_record:
-            #    2a and datestamp has not changed, skip unless update_all is set
-            #       if there were errors during the last harvest, we want to try again
-            if (
-                oai_datestamp == oai_record.datestamp
-                and oai_deleted == oai_record.deleted
-                and not self._update_all
-                and oai_record.has_errors is False
-                and oai_record.has_warnings is False
-            ):
-                # try to read the existing record
-                try:
-                    fetched_record = self.service.read(system_identity, oai_record.record_pid)
-                    stream_entry.entry["record"] = fetched_record.to_dict()
-                except Exception:  # noqa: BLE001 to catch all possible errors
-                    current_app.logger.warning(
-                        "Failed to read existing record %s for OAI identifier %s. Re-writing the record.",
-                        oai_record.record_pid,
-                        oai_identifier,
-                    )
-                    # proceed to re-write the record
-                else:
-                    return stream_entry
+        # 2. if exists, check if the record is already up to date
+        if self._check_up_to_date(stream_entry, oai_record, oai_datestamp, oai_deleted):
+            return stream_entry
 
-            if oai_record.record_pid is not None:
-                pid_value = oai_record.record_pid
-                op_type = "update"
-            else:
-                op_type = "create"
-        else:
-            op_type = "create"
+        pid_value = oai_record.record_pid if oai_record else None
+        if not pid_value:
+            pid_value = self._get_pid_value_from_record(transformed_data)
 
-        # if should delete, set op_type to delete regardless if oai_record exists
-        if oai_deleted:
-            op_type = "delete"
+        # 3. try to get an existing record by pid_value
+        existing_record = None
+        existing_draft = None
+        if pid_value:
+            try:
+                existing_record = self.service.record_cls.pid.resolve(pid_value)
+            except PersistentIdentifierError:
+                if self._publish:
+                    draft_cls = cast("DraftRecordService", self.service).draft_cls
+                    with contextlib.suppress(PersistentIdentifierError):
+                        existing_draft = draft_cls.pid.resolve(pid_value)
+
+        # 5. decide on operation type
+        op_type = self._determine_operation_type(oai_deleted, existing_record, existing_draft)
 
         written_data = None
         exception_raised = None
@@ -144,24 +136,27 @@ class OAIServiceWriter(BaseWriter):
                 if written_data:
                     # ensure the written data is also transformed (e.g. to resolve lazy strings)
                     written_data = json.loads(json.dumps(written_data, default=str))
-                current_app.logger.debug(
-                    "Written %s",
-                    json.dumps(written_data, indent=2, ensure_ascii=False),
-                )
 
-                if written_data and written_data.get("errors"):
-                    # the service reported errors during creation/update
-                    stream_entry.errors = written_data["errors"]
-                    raise ValidationError("Errors during record write operation: " + json.dumps(written_data["errors"]))
-                if self._publish and written_data and op_type == "create":
-                    publish_method = getattr(self.service, "publish", None)
-                    if not publish_method:
-                        raise NotImplementedError(f"The service for model {self._model} does not support publishing.")
-                    publish_method(
-                        self._identity,
-                        dict_lookup(written_data, self._pid_field),
-                        uow=uow,
+                    current_app.logger.debug(
+                        "Written (%s) %s",
+                        op_type,
+                        json.dumps(written_data, indent=2, ensure_ascii=False),
                     )
+
+                    if written_data.get("errors"):
+                        # the service reported errors during creation/update
+                        stream_entry.errors = written_data["errors"]
+                        raise ValidationError(
+                            "Errors during record write operation: " + json.dumps(written_data["errors"])
+                        )
+
+                    if self._publish and op_type in ("create", "update_draft"):
+                        draft_service = cast("DraftRecordService", self.service)
+                        draft_service.publish(
+                            self._identity,
+                            dict_lookup(written_data, self._pid_field),
+                            uow=uow,
+                        )
                 uow.commit()
         except Exception as e:  # noqa: BLE001 to catch all possible errors
             # we can't know the state of the db connection, rollback is a safe bet
@@ -189,6 +184,74 @@ class OAIServiceWriter(BaseWriter):
         }
         stream_entry.op_type = op_type
         return stream_entry
+
+    def _determine_operation_type(
+        self,
+        oai_deleted: bool,
+        existing_record: Record | None,
+        existing_draft: Record | None,
+    ) -> str:
+        """Determine the operation type based on existing records and deletion status."""
+        if oai_deleted:
+            if existing_record is not None:
+                op_type = "delete"
+            elif existing_draft is not None:
+                op_type = "delete_draft"
+            else:
+                op_type = "noop"
+        elif existing_record is not None:
+            op_type = "update"
+        elif existing_draft is not None:
+            op_type = "update_draft"
+        else:
+            op_type = "create"
+        return op_type
+
+    def _get_oai_record(self, oai_identifier: str) -> OAIHarvestedRecord | None:
+        """Get the OAIHarvestedRecord instance by its OAI identifier."""
+        return db.session.query(OAIHarvestedRecord).filter_by(oai_identifier=oai_identifier).one_or_none()  # type: ignore[no-any-return]
+
+    def _check_up_to_date(
+        self,
+        stream_entry: StreamEntry,
+        oai_record: OAIHarvestedRecord | None,
+        oai_datestamp: datetime.datetime,
+        oai_deleted: bool,
+    ) -> bool:
+        if not oai_record:
+            return False
+
+        if (
+            oai_datestamp == oai_record.datestamp
+            and oai_deleted == oai_record.deleted
+            and not self._update_all
+            and oai_record.has_errors is False
+            and oai_record.has_warnings is False
+        ):
+            # try to read the existing record
+            try:
+                fetched_record = self.service.read(system_identity, oai_record.record_pid)
+                stream_entry.entry["record"] = fetched_record.to_dict()
+            except Exception:  # noqa: BLE001 to catch all possible errors
+                current_app.logger.warning(
+                    "Failed to read existing record %s for OAI identifier %s. Re-writing the record.",
+                    oai_record.record_pid,
+                    oai_record.oai_identifier,
+                )
+                # proceed to re-write the record
+            else:
+                return True
+        return False
+
+    def _get_pid_value_from_record(self, record_data: dict) -> str | None:
+        pid_field = getattr(self.service.record_cls.pid, "field", None)
+        pid_provider = getattr(pid_field, "_provider", None) if pid_field else None
+        get_pid_value_from_record = getattr(pid_provider, "get_pid_value_from_record", None) if pid_provider else None
+        pid_type = getattr(pid_field, "_pid_type", None) if pid_field else None
+        if get_pid_value_from_record and pid_type:
+            # try to get pid value from transformed data
+            return get_pid_value_from_record(record_data)  # type: ignore[no-any-return]
+        return None
 
     def _store_oai_record(  # noqa PLR0913 too many arguments
         self,
@@ -240,36 +303,33 @@ class OAIServiceWriter(BaseWriter):
 
     def _write(self, record_data: dict, pid_value: str | None, op_type: str, uow: UnitOfWork) -> dict | None:
         """Write the record data using the service."""
+        if op_type == "noop":
+            return None
         if op_type == "create":
             return cast(
                 "dict",
                 self.service.create(self._identity, record_data, uow=uow).to_dict(),
             )
-        if op_type == "update":
-            if pid_value is None:
-                raise ValueError("pid_value must be provided for update operation")
-            try:
-                return cast(
-                    "dict",
-                    self.service.update(self._identity, pid_value, record_data, uow=uow).to_dict(),
-                )
-            except Exception:  # noqa BLE001 to catch all possible errors
-                # if update fails, try to update draft
-                try:
-                    update_draft = getattr(self.service, "update_draft", None)
-                    if update_draft is None:
-                        raise NotImplementedError(f"The service for model {self._model} does not support draft update.")
-                    return cast(
-                        "dict",
-                        update_draft(self._identity, pid_value, record_data, uow=uow).to_dict(),
-                    )
-                except Exception:  # noqa BLE001 to catch all possible errors
-                    # if draft update also fails, try to create new record
-                    return self._write(record_data, pid_value, "create", uow)
+        if pid_value is None:
+            raise ValueError(f"pid_value must be provided for {op_type} operation")
 
+        if op_type == "update_draft":
+            draft_service = cast("DraftRecordService", self.service)
+            return cast(
+                "dict",
+                draft_service.update_draft(self._identity, pid_value, record_data, uow=uow).to_dict(),
+            )
+        if op_type == "update":
+            return cast(
+                "dict",
+                self.service.update(self._identity, pid_value, record_data, uow=uow).to_dict(),
+            )
         if op_type == "delete":
-            if pid_value is not None:
-                self.service.delete(self._identity, pid_value, uow=uow)
+            self.service.delete(self._identity, pid_value, uow=uow)
+            return None
+        if op_type == "delete_draft":
+            draft_service = cast("DraftRecordService", self.service)
+            draft_service.delete_draft(self._identity, pid_value, uow=uow)
             return None
         raise ValueError(f"Unknown operation type: {op_type}")
 

@@ -218,10 +218,12 @@ class OAIRecordService(RecordService):
 
         self.require_permission(identity, "run_harvest", record=oai_record)
 
-        # TODO: perform the harvest here
-        raise RuntimeError("Invenio OAIPMHReader does not allow passing item identifier")
+        from ..tasks import harvest_oaipmh_records
 
-        # # re-get the record
-        # oai_record = OAIRecordAggregate.get_record(id_) # noqa: ERA001
+        # Fire-and-forget: we do not need the result of the Celery task here.
+        harvest_oaipmh_records.delay(harvester_id=oai_record.harvester.id, oai_ids=[id_])
 
-        # return self.result_item(self, identity, oai_record, links_tpl=self.links_item_tpl) # noqa: ERA001
+        # re-get the record
+        oai_record = OAIRecordAggregate.get_record(id_)
+
+        return self.result_item(self, identity, oai_record, links_tpl=self.links_item_tpl)
