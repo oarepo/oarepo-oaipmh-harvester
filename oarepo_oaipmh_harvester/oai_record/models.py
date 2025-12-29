@@ -137,7 +137,7 @@ class OAIRecordAggregateModel(AggregateMetadata):
     # the UserAggregate API class.
     _properties = (
         "oai_identifier",
-        "record_id",
+        "record_pid",
         "datestamp",
         "harvested_at",
         "deleted",

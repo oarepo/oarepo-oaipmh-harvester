@@ -92,7 +92,7 @@ class RecordListView(OAIHarvesterPermissionsMixin, AdminResourceListView):
 
     item_field_list: Mapping[str, dict[str, Any]] = {
         "oai_identifier": {"text": _("OAI Identifier"), "order": 1, "width": 2},
-        "record_id": {
+        "record_pid": {
             "text": _("Record ID"),
             "order": 2,
             "width": 2,

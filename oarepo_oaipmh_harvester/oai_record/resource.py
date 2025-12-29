@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, override
+from typing import TYPE_CHECKING, Any, ClassVar, cast, override
 
 import marshmallow as ma
 import yaml
@@ -45,6 +45,17 @@ def data_to_html_yaml(data: Any) -> str:
     return highlight(yaml_str, YamlLexer(), HtmlFormatter(full=False))  # type: ignore[no-any-return]
 
 
+def location_to_list(errors: list[Any] | None) -> list[Any]:
+    """Convert error locations inside serialized errors from string to list."""
+    if errors is None:
+        return []
+    for error in errors:
+        error_location = error.get("location")
+        if error_location is not None:
+            error["location"] = error_location.split("\n")
+    return errors
+
+
 class AdministrationDetailJSONSerializer(JSONSerializer):
     """JSON serializer for administration API."""
 
@@ -66,14 +77,20 @@ class AdministrationDetailJSONSerializer(JSONSerializer):
             serialized_record["title"] = tr.get("metadata", {}).get("title", "") or tr.get("title", "")
             if serialized_record["title"]:
                 serialized_record["title"] = str(serialized_record["title"])
+        record_pid = serialized_record.get("record_pid")
+        if record_pid:
             record_link = tr.get("links", {}).get("self_html")
             if record_link:
                 serialized_record["record_id_with_link"] = '<a href="{}">{}</a>'.format(
-                    record_link, serialized_record["id"]
+                    record_link, serialized_record["record_pid"]
                 )
             else:
-                serialized_record["record_id_with_link"] = serialized_record["id"]
-        serialized_record["errors"] = data_to_html_yaml(serialized_record.get("errors"))
+                serialized_record["record_id_with_link"] = '<a href="{}">{}</a>'.format(
+                    f"/records/{record_pid}", serialized_record["record_pid"]
+                )
+        serialized_record["errors"] = data_to_html_yaml(
+            location_to_list(cast("list[Any]", serialized_record.get("errors")))
+        )
         serialized_record["original_data"] = data_to_html_yaml(serialized_record.get("original_data"))
         serialized_record["transformed_data"] = data_to_html_yaml(serialized_record.get("transformed_data"))
         serialized_record["has_errors"] = "Yes" if serialized_record.get("has_errors") else "No"

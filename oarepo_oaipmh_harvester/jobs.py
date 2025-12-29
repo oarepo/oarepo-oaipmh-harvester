@@ -54,12 +54,13 @@ class OAIHarvestJob(JobType):
         cls,
         job_obj: Job,  # noqa ARG003 for interface compatibility
         since: None | datetime = None,
-        **kwargs: Any,  # noqa ARG003 for interface compatibility
+        **kwargs: Any,
     ) -> dict:
         """Build task arguments for the job."""
         return {
             "harvester_id": cls.id.replace("harvest_oaipmh_records_", ""),
             "since": since.isoformat() if since else None,
+            "oai_ids": kwargs.get("oai_ids"),
         }
 
 
