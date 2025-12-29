@@ -24,7 +24,7 @@
             "oai_identifier": {
                 "type": "keyword"
             },
-            "record_id": {
+            "record_pid": {
                 "type": "keyword"
             },
             "datestamp": {
@@ -46,13 +46,16 @@
                 "type": "object",
                 "properties": {
                     "message": {
-                        "type": "keyword"
+                        "type": "keyword",
+                        "ignore_above": 128
                     },
                     "type": {
-                        "type": "keyword"
+                        "type": "keyword",
+                        "ignore_above": 128
                     },
                     "location": {
-                        "type": "keyword"
+                        "type": "keyword",
+                        "ignore_above": 128
                     }
                 }
             },

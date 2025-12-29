@@ -52,8 +52,8 @@ class OAIRecordAggregate(BaseAggregate):
 
     oai_identifier = ModelField("oai_identifier", dump_type=str)
     """The OAI identifier of the record."""
-    record_id = ModelField("record_id", dump_type=str)
-    """The record ID of the record."""
+    record_pid = ModelField("record_pid", dump_type=str)
+    """The persistent identifier of the record."""
     datestamp = ModelField("datestamp", dump_type=datetime)
     """The datestamp of the record."""
     harvested_at = ModelField("harvested_at", dump_type=datetime)

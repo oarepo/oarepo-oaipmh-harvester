@@ -21,8 +21,8 @@ class OAIHarvestedRecordSchema(BaseRecordSchema):
 
     oai_identifier = fields.String(required=True)
     """The OAI identifier of the record."""
-    record_id = fields.String(allow_none=True)
-    """The record ID of the record."""
+    record_pid = fields.String(allow_none=True)
+    """The persistent identifier of the record."""
     datestamp = fields.DateTime(required=True)
     """The datestamp of the record."""
     harvested_at = fields.DateTime(required=True)

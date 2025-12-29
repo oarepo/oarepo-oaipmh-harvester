@@ -22,7 +22,6 @@ from invenio_db.uow import UnitOfWork
 from invenio_pidstore.errors import PersistentIdentifierError
 from invenio_records.dictutils import dict_lookup
 from invenio_vocabularies.datastreams.writers import BaseWriter
-from marshmallow import ValidationError
 from oarepo_runtime import current_runtime
 
 from oarepo_oaipmh_harvester.oai_record.models import (
@@ -31,6 +30,8 @@ from oarepo_oaipmh_harvester.oai_record.models import (
 from oarepo_oaipmh_harvester.proxies import current_oai_record_service
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from flask_principal import Identity
     from invenio_drafts_resources.services.records import (
         RecordService as DraftRecordService,
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
 
 
 # TODO: the writer does not solve the case of dangling draft records
+MAX_TRACEBACK_VARIABLE_LENGTH = 100
 
 
 class OAIServiceWriter(BaseWriter):
@@ -100,6 +102,12 @@ class OAIServiceWriter(BaseWriter):
         # 1. check if there is an OAI record already
         oai_record = self._get_oai_record(oai_identifier)
 
+        current_app.logger.debug(
+            "Processing OAI identifier %s: existing OAI record: %s",
+            oai_identifier,
+            oai_record,
+        )
+
         # 2. if exists, check if the record is already up to date
         if self._check_up_to_date(stream_entry, oai_record, oai_datestamp, oai_deleted):
             return stream_entry
@@ -122,42 +130,23 @@ class OAIServiceWriter(BaseWriter):
 
         # 5. decide on operation type
         op_type = self._determine_operation_type(oai_deleted, existing_record, existing_draft)
-
+        current_app.logger.debug(
+            "Determined operation type '%s' for OAI identifier %s (pid_value=%s)",
+            op_type,
+            oai_identifier,
+            pid_value,
+        )
         written_data = None
         exception_raised = None
 
         try:
-            # we use unit of work here to avoid side effects
-            # (such as created draft record) in case of failure
-            with UnitOfWork() as uow:
-                # resolve lazy strings before writing
-                transformed_data = json.loads(json.dumps(transformed_data, default=str))
-                written_data = self._write(transformed_data, pid_value, op_type, uow)
-                if written_data:
-                    # ensure the written data is also transformed (e.g. to resolve lazy strings)
-                    written_data = json.loads(json.dumps(written_data, default=str))
-
-                    current_app.logger.debug(
-                        "Written (%s) %s",
-                        op_type,
-                        json.dumps(written_data, indent=2, ensure_ascii=False),
-                    )
-
-                    if written_data.get("errors"):
-                        # the service reported errors during creation/update
-                        stream_entry.errors = written_data["errors"]
-                        raise ValidationError(
-                            "Errors during record write operation: " + json.dumps(written_data["errors"])
-                        )
-
-                    if self._publish and op_type in ("create", "update_draft"):
-                        draft_service = cast("DraftRecordService", self.service)
-                        draft_service.publish(
-                            self._identity,
-                            dict_lookup(written_data, self._pid_field),
-                            uow=uow,
-                        )
-                uow.commit()
+            written_data = self._save_and_publish_record(
+                transformed_data,
+                pid_value,
+                op_type,
+                stream_entry,
+                oai_identifier,
+            )
         except Exception as e:  # noqa: BLE001 to catch all possible errors
             # we can't know the state of the db connection, rollback is a safe bet
             db.session.rollback()
@@ -206,6 +195,72 @@ class OAIServiceWriter(BaseWriter):
         else:
             op_type = "create"
         return op_type
+
+    def _save_and_publish_record(
+        self,
+        transformed_data: dict,
+        pid_value: str | None,
+        op_type: str,
+        stream_entry: StreamEntry,
+        oai_identifier: str,
+    ) -> dict | None:
+        """Save and optionally publish a record within a unit of work.
+
+        Args:
+            transformed_data: The transformed record data to be saved.
+            pid_value: The persistent identifier value of the record.
+            op_type: The operation type (create, update, delete, etc.).
+            stream_entry: The stream entry being processed.
+            oai_identifier: The OAI identifier of the record.
+
+        Returns:
+            written_data: The data of the written record, or None if not applicable.
+
+        """
+        # we use unit of work here to avoid side effects
+        # (such as created draft record) in case of failure
+        with UnitOfWork() as uow:
+            # resolve lazy strings before writing
+            transformed_data = json.loads(json.dumps(transformed_data, default=str))
+            try:
+                written_data = self._write(transformed_data, pid_value, op_type, uow)
+            except Exception:
+                current_app.logger.exception(
+                    "Error during '%s' operation for OAI identifier %s",
+                    op_type,
+                    oai_identifier,
+                )
+                raise
+            commit_transaction = True
+            if written_data:
+                # ensure the written data is also transformed (e.g. to resolve lazy strings)
+                written_data = json.loads(json.dumps(written_data, default=str))
+
+                current_app.logger.debug(
+                    "Written (%s) %s",
+                    op_type,
+                    json.dumps(written_data, indent=2, ensure_ascii=False),
+                )
+
+                if written_data.get("errors"):
+                    # the service reported errors during creation/update
+
+                    stream_entry.errors = [  # type: ignore[reportAttributeAccessIssue]
+                        x for err in written_data["errors"] for x in self._convert_to_oai_error(err)
+                    ]
+                    commit_transaction = False
+                elif self._publish and op_type in ("create", "update_draft"):
+                    draft_service = cast("DraftRecordService", self.service)
+                    draft_service.publish(
+                        self._identity,
+                        dict_lookup(written_data, self._pid_field),
+                        uow=uow,
+                    )
+            if commit_transaction:
+                uow.commit()
+            else:
+                uow.rollback()
+            return written_data
 
     def _get_oai_record(self, oai_identifier: str) -> OAIHarvestedRecord | None:
         """Get the OAIHarvestedRecord instance by its OAI identifier."""
@@ -339,9 +394,23 @@ class OAIServiceWriter(BaseWriter):
         return [self.write(stream_entry, *args, **kwargs) for stream_entry in stream_entries]
 
     def _convert_exception_to_error_dict(self, exception: Exception) -> dict:
+        tb = exception.__traceback__
+        formatted_tb = []
+        while tb:
+            frame = tb.tb_frame
+            fn = (frame.f_code.co_filename or "").split("site-packages/")[-1]
+            formatted_tb.append(f"{frame.f_code.co_name}@{fn}:{tb.tb_lineno}")
+            for local_name, local_value in frame.f_locals.items():
+                local_value_str = repr(local_value)
+                if len(local_value_str) > MAX_TRACEBACK_VARIABLE_LENGTH:
+                    local_value_str = local_value_str[: MAX_TRACEBACK_VARIABLE_LENGTH - 3] + "..."
+                formatted_tb.append(f"    {local_name} = {local_value_str}")
+            tb = tb.tb_next
+
         return {
             "type": type(exception).__name__,
             "message": str(exception),
+            "location": "\n".join(formatted_tb),
         }
 
     def _convert_stream_error(self, error: Any) -> dict:
@@ -350,3 +419,17 @@ class OAIServiceWriter(BaseWriter):
         if isinstance(error, Exception):
             return self._convert_exception_to_error_dict(error)
         return {"message": str(error)}
+
+    def _convert_to_oai_error(self, error: Any) -> Generator[dict]:
+        """Convert a service error to an OAI-PMH error dict (type, location, message)."""
+        if not isinstance(error, dict):
+            yield {"message": str(error)}
+        else:
+            field = error.get("field", "unknown")
+            messages = error.get("messages") or []
+            for message in messages:
+                yield {
+                    "type": "validation_error",
+                    "location": field,
+                    "message": str(message),
+                }

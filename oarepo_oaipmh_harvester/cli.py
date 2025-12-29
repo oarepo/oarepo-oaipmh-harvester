@@ -307,18 +307,32 @@ def delete_harvester(harvester_id: str, yes: bool) -> None:
 
 @oai_cli.command("harvest")
 @click.argument("harvester_id")
+@click.argument("identifiers", required=False, nargs=-1)
 @click.option("--since", help="Harvest records modified since this date (ISO format)")
 @click.option("--use-job", is_flag=True, help="Use job to perform harvesting")
 @with_appcontext
-def harvest_harvester(harvester_id: str, since: str | None, use_job: bool = False) -> None:
+def harvest_harvester(
+    harvester_id: str,
+    since: str | None,
+    use_job: bool = False,
+    identifiers: tuple[str, ...] = (),
+) -> None:
     """Trigger harvesting for an OAI-PMH harvester."""
     if use_job:
         job = get_oaipmh_job(harvester_id)
-        current_runs_service.create(system_identity, job.id, params={"since": since})
+        current_runs_service.create(
+            system_identity,
+            job.id,
+            params={
+                "since": since,
+                "oai_ids": ",".join(identifiers) if identifiers else None,
+            },
+        )
     else:
         from oarepo_oaipmh_harvester.tasks import harvest_oaipmh_records
 
         harvest_oaipmh_records(
             harvester_id=harvester_id,
             since=arrow.get(since).datetime if since else None,
+            oai_ids=list(identifiers) if identifiers else None,
         )
