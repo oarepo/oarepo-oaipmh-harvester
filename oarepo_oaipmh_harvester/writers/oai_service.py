@@ -113,7 +113,7 @@ class OAIServiceWriter(BaseWriter):
             return stream_entry
 
         pid_value = oai_record.record_pid if oai_record else None
-        if not pid_value:
+        if not pid_value and not oai_deleted:
             pid_value = self._get_pid_value_from_record(transformed_data)
 
         # 3. try to get an existing record by pid_value

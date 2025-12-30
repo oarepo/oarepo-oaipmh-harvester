@@ -93,8 +93,8 @@ class AdministrationDetailJSONSerializer(JSONSerializer):
         )
         serialized_record["original_data"] = data_to_html_yaml(serialized_record.get("original_data"))
         serialized_record["transformed_data"] = data_to_html_yaml(serialized_record.get("transformed_data"))
-        serialized_record["has_errors"] = "Yes" if serialized_record.get("has_errors") else "No"
-        serialized_record["deleted"] = "Yes" if serialized_record.get("deleted") else "No"
+        serialized_record["has_errors"] = serialized_record.get("has_errors")
+        serialized_record["deleted"] = serialized_record.get("deleted")
         return serialized_record
 
 
