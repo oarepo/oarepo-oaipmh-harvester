@@ -27,7 +27,10 @@ VOCABULARIES_DATASTREAM_WRITERS = {
     "oai-service": OAIServiceWriter,
 }
 
-OAI_HARVESTER_DEFAULT_BATCH_SIZE = 100
+# Normally no need to change this value as batch processing is not performed
+# in normal transformers and writers and thus higher batch size just means
+# higher memory consumption without any performance benefit.
+OAI_HARVESTER_DEFAULT_BATCH_SIZE = 1
 
 OAI_HARVESTER_SORT_OPTIONS: dict[str, Any] = {
     "newest": {
