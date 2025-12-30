@@ -41,9 +41,7 @@ if TYPE_CHECKING:
 
 def data_to_html_yaml(data: Any) -> str:
     """Convert data to HTML highlighted YAML."""
-    yaml_str = yaml.dump(
-        data, default_flow_style=False, sort_keys=False, allow_unicode=True
-    )
+    yaml_str = yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
     return highlight(yaml_str, YamlLexer(), HtmlFormatter(full=False))  # type: ignore[no-any-return]
 
 
@@ -69,21 +67,14 @@ class AdministrationDetailJSONSerializer(JSONSerializer):
 
     @override
     def serialize_object_list(self, obj_list: dict[str, Any]) -> str:
-        obj_list["hits"]["hits"] = [
-            self._convert_to_administration_detail(obj)
-            for obj in obj_list["hits"]["hits"]
-        ]
+        obj_list["hits"]["hits"] = [self._convert_to_administration_detail(obj) for obj in obj_list["hits"]["hits"]]
         return super().serialize_object_list(obj_list)  # type: ignore[no-any-return]
 
-    def _convert_to_administration_detail(
-        self, serialized_record: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _convert_to_administration_detail(self, serialized_record: dict[str, Any]) -> dict[str, Any]:
         serialized_record = {**serialized_record}
         tr = serialized_record.get("transformed_data", {})
         if tr:
-            serialized_record["title"] = tr.get("metadata", {}).get(
-                "title", ""
-            ) or tr.get("title", "")
+            serialized_record["title"] = tr.get("metadata", {}).get("title", "") or tr.get("title", "")
             if serialized_record["title"]:
                 serialized_record["title"] = str(serialized_record["title"])
         record_pid = serialized_record.get("record_pid")
@@ -100,12 +91,8 @@ class AdministrationDetailJSONSerializer(JSONSerializer):
         serialized_record["errors"] = data_to_html_yaml(
             location_to_list(cast("list[Any]", serialized_record.get("errors")))
         )
-        serialized_record["original_data"] = data_to_html_yaml(
-            serialized_record.get("original_data")
-        )
-        serialized_record["transformed_data"] = data_to_html_yaml(
-            serialized_record.get("transformed_data")
-        )
+        serialized_record["original_data"] = data_to_html_yaml(serialized_record.get("original_data"))
+        serialized_record["transformed_data"] = data_to_html_yaml(serialized_record.get("transformed_data"))
         serialized_record["has_errors"] = serialized_record.get("has_errors")
         serialized_record["deleted"] = serialized_record.get("deleted")
         return serialized_record
@@ -141,9 +128,7 @@ class OAIRecordResourceConfig(RecordResourceConfig):
     }
 
     response_handlers: Mapping[str, Any] = {
-        "application/vnd.inveniordm.v1+json": RecordResourceConfig.response_handlers[
-            "application/json"
-        ],
+        "application/vnd.inveniordm.v1+json": RecordResourceConfig.response_handlers["application/json"],
         "application/invenio-administration-detail+json": ResponseHandler(
             serializer=AdministrationDetailJSONSerializer(),
             headers=etag_headers,
