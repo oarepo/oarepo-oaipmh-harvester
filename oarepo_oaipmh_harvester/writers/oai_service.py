@@ -113,7 +113,7 @@ class OAIServiceWriter(BaseWriter):
             return stream_entry
 
         pid_value = oai_record.record_pid if oai_record else None
-        if not pid_value:
+        if not pid_value and not oai_deleted:
             pid_value = self._get_pid_value_from_record(transformed_data)
 
         # 3. try to get an existing record by pid_value
@@ -129,7 +129,9 @@ class OAIServiceWriter(BaseWriter):
                         existing_draft = draft_cls.pid.resolve(pid_value)
 
         # 5. decide on operation type
-        op_type = self._determine_operation_type(oai_deleted, existing_record, existing_draft)
+        op_type = self._determine_operation_type(
+            oai_deleted, existing_record, existing_draft
+        )
         current_app.logger.debug(
             "Determined operation type '%s' for OAI identifier %s (pid_value=%s)",
             op_type,
@@ -246,7 +248,9 @@ class OAIServiceWriter(BaseWriter):
                     # the service reported errors during creation/update
 
                     stream_entry.errors = [  # type: ignore[reportAttributeAccessIssue]
-                        x for err in written_data["errors"] for x in self._convert_to_oai_error(err)
+                        x
+                        for err in written_data["errors"]
+                        for x in self._convert_to_oai_error(err)
                     ]
                     commit_transaction = False
                 elif self._publish and op_type in ("create", "update_draft"):
@@ -285,7 +289,9 @@ class OAIServiceWriter(BaseWriter):
         ):
             # try to read the existing record
             try:
-                fetched_record = self.service.read(system_identity, oai_record.record_pid)
+                fetched_record = self.service.read(
+                    system_identity, oai_record.record_pid
+                )
                 stream_entry.entry["record"] = fetched_record.to_dict()
             except Exception:  # noqa: BLE001 to catch all possible errors
                 current_app.logger.warning(
@@ -301,7 +307,11 @@ class OAIServiceWriter(BaseWriter):
     def _get_pid_value_from_record(self, record_data: dict) -> str | None:
         pid_field = getattr(self.service.record_cls.pid, "field", None)
         pid_provider = getattr(pid_field, "_provider", None) if pid_field else None
-        get_pid_value_from_record = getattr(pid_provider, "get_pid_value_from_record", None) if pid_provider else None
+        get_pid_value_from_record = (
+            getattr(pid_provider, "get_pid_value_from_record", None)
+            if pid_provider
+            else None
+        )
         pid_type = getattr(pid_field, "_pid_type", None) if pid_field else None
         if get_pid_value_from_record and pid_type:
             # try to get pid value from transformed data
@@ -330,11 +340,17 @@ class OAIServiceWriter(BaseWriter):
                 harvester_id=self._harvester_id,
             )
         # store errors and warnings
-        oai_record.errors = [self._convert_stream_error(e) for e in (stream_entry.errors or [])]
+        oai_record.errors = [
+            self._convert_stream_error(e) for e in (stream_entry.errors or [])
+        ]
         if exception_raised is not None:
-            oai_record.errors.append(self._convert_exception_to_error_dict(exception_raised))
+            oai_record.errors.append(
+                self._convert_exception_to_error_dict(exception_raised)
+            )
         if stream_entry.exc:
-            oai_record.errors.append(self._convert_exception_to_error_dict(stream_entry.exc))
+            oai_record.errors.append(
+                self._convert_exception_to_error_dict(stream_entry.exc)
+            )
         oai_record.harvested_at = harvested_at
         oai_record.has_errors = bool(oai_record.errors)
         # no warnings tracking for now
@@ -356,7 +372,9 @@ class OAIServiceWriter(BaseWriter):
 
         current_oai_record_service.indexer.bulk_index([oai_record.oai_identifier])
 
-    def _write(self, record_data: dict, pid_value: str | None, op_type: str, uow: UnitOfWork) -> dict | None:
+    def _write(
+        self, record_data: dict, pid_value: str | None, op_type: str, uow: UnitOfWork
+    ) -> dict | None:
         """Write the record data using the service."""
         if op_type == "noop":
             return None
@@ -372,12 +390,16 @@ class OAIServiceWriter(BaseWriter):
             draft_service = cast("DraftRecordService", self.service)
             return cast(
                 "dict",
-                draft_service.update_draft(self._identity, pid_value, record_data, uow=uow).to_dict(),
+                draft_service.update_draft(
+                    self._identity, pid_value, record_data, uow=uow
+                ).to_dict(),
             )
         if op_type == "update":
             return cast(
                 "dict",
-                self.service.update(self._identity, pid_value, record_data, uow=uow).to_dict(),
+                self.service.update(
+                    self._identity, pid_value, record_data, uow=uow
+                ).to_dict(),
             )
         if op_type == "delete":
             self.service.delete(self._identity, pid_value, uow=uow)
@@ -388,10 +410,14 @@ class OAIServiceWriter(BaseWriter):
             return None
         raise ValueError(f"Unknown operation type: {op_type}")
 
-    def write_many(self, stream_entries: list[StreamEntry], *args: Any, **kwargs: Any) -> list[StreamEntry]:
+    def write_many(
+        self, stream_entries: list[StreamEntry], *args: Any, **kwargs: Any
+    ) -> list[StreamEntry]:
         """Write the input entries using a given service."""
         # For now, just call write() for each entry
-        return [self.write(stream_entry, *args, **kwargs) for stream_entry in stream_entries]
+        return [
+            self.write(stream_entry, *args, **kwargs) for stream_entry in stream_entries
+        ]
 
     def _convert_exception_to_error_dict(self, exception: Exception) -> dict:
         tb = exception.__traceback__
@@ -403,7 +429,9 @@ class OAIServiceWriter(BaseWriter):
             for local_name, local_value in frame.f_locals.items():
                 local_value_str = repr(local_value)
                 if len(local_value_str) > MAX_TRACEBACK_VARIABLE_LENGTH:
-                    local_value_str = local_value_str[: MAX_TRACEBACK_VARIABLE_LENGTH - 3] + "..."
+                    local_value_str = (
+                        local_value_str[: MAX_TRACEBACK_VARIABLE_LENGTH - 3] + "..."
+                    )
                 formatted_tb.append(f"    {local_name} = {local_value_str}")
             tb = tb.tb_next
 
