@@ -29,7 +29,7 @@ def harvest_oaipmh_records(
     harvester_id: str,
     oai_ids: list[str] | None = None,
     since: datetime | None = None,
-    batch_size: int = 10,
+    batch_size: int | None = None,
 ) -> None:
     """Harvest OAI-PMH records for the given harvester."""
     harvester = OAIHarvesterAggregate.get_record(harvester_id)
