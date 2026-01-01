@@ -10,7 +10,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from datetime import datetime
+from typing import cast
 
 import json5
 from celery.app import shared_task
@@ -18,9 +19,6 @@ from flask import current_app
 from invenio_vocabularies.datastreams.factories import DataStreamFactory
 
 from oarepo_oaipmh_harvester.oai_harvester.api import OAIHarvesterAggregate
-
-if TYPE_CHECKING:
-    from datetime import datetime
 
 
 @shared_task
@@ -66,7 +64,7 @@ def parse_config(config: str) -> tuple[str, dict]:
 
 def create_readers(
     harvester: OAIHarvesterAggregate,
-    since: datetime | None = None,
+    since: datetime | str | None = None,
     oai_ids: list[str] | None = None,
 ) -> dict:
     """Create readers config for the harvester."""
@@ -78,7 +76,9 @@ def create_readers(
     if "set" not in reader_args and harvester.setspec:
         reader_args["set"] = harvester.setspec
     if "from_date" not in reader_args and since:
-        reader_args["from_date"] = since.isoformat()
+        if since and isinstance(since, datetime):
+            since = since.isoformat()
+        reader_args["from_date"] = since
     if oai_ids is not None:
         reader_args["identifiers"] = oai_ids
     reader_args["harvester_id"] = harvester.id
