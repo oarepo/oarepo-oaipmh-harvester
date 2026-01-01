@@ -10,7 +10,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from datetime import datetime
+from typing import Any
 
 from invenio_db import db
 from invenio_jobs.jobs import JobType
@@ -20,9 +21,6 @@ from invenio_jobs.proxies import current_jobs
 from oarepo_oaipmh_harvester.oai_harvester.models import OAIHarvester
 
 from .tasks import harvest_oaipmh_records
-
-if TYPE_CHECKING:
-    from datetime import datetime
 
 
 class OAIHarvestJob(JobType):
@@ -53,13 +51,15 @@ class OAIHarvestJob(JobType):
     def build_task_arguments(
         cls,
         job_obj: Job,  # noqa ARG003 for interface compatibility
-        since: None | datetime = None,
+        since: None | datetime | str = None,
         **kwargs: Any,
     ) -> dict:
         """Build task arguments for the job."""
+        if since and isinstance(since, datetime):
+            since = since.isoformat()
         return {
             "harvester_id": cls.id.replace("harvest_oaipmh_records_", ""),
-            "since": since.isoformat() if since else None,
+            "since": since,
             "oai_ids": kwargs.get("oai_ids"),
         }
 
