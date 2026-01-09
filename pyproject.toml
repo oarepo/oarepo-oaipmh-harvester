@@ -95,6 +95,9 @@ oarepo-oaipmh-harvester_record = "oarepo_oaipmh_harvester.oai_record.views:creat
 [project.entry-points."invenio_celery.tasks"]
 oarepo_harvest = "oarepo_oaipmh_harvester.tasks"
 
+[project.entry-points."invenio_jobs.jobs"]
+oarepo_oaipmh_run_all_harvesters = "oarepo_oaipmh_harvester.tasks:RunAllHarvesters"
+
 [project.entry-points."invenio_search.mappings"]
 oai-harvester = "oarepo_oaipmh_harvester.oai_harvester.mappings"
 oai-harvest-record = "oarepo_oaipmh_harvester.oai_record.mappings"

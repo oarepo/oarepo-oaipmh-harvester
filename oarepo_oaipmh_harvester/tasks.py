@@ -16,9 +16,11 @@ from typing import cast
 import json5
 from celery.app import shared_task
 from flask import current_app
+from invenio_jobs.jobs import JobType
 from invenio_vocabularies.datastreams.factories import DataStreamFactory
 
 from oarepo_oaipmh_harvester.oai_harvester.api import OAIHarvesterAggregate
+from oarepo_oaipmh_harvester.oai_harvester.models import OAIHarvester
 
 
 @shared_task
@@ -116,3 +118,25 @@ def create_writers(harvester: OAIHarvesterAggregate) -> list[dict]:
             }
         )
     return writers
+
+
+@shared_task(ignore_result=True)
+def run_all_harvesters() -> None:
+    """Run all OAI-PMH harvester tasks."""
+    harvesters = OAIHarvester.query.all()
+    for harvester in harvesters:
+        try:
+            current_app.logger.info("Started harvesting %s", harvester.id)
+            harvest_oaipmh_records(harvester_id=harvester.id)
+            current_app.logger.info("Successfully harvested %s", harvester.id)
+        except Exception:  # pragma: no cover
+            current_app.logger.exception("Exception during harvesting %s", harvester.id)
+
+
+class RunAllHarvesters(JobType):
+    """A job type to run invenio CLI commands as Celery tasks."""
+
+    id = "run_all_harvesters"
+    title = "Run all harvester tasks"
+    description = "Run all harvester tasks."
+    task = run_all_harvesters
