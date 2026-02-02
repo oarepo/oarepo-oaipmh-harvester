@@ -14,11 +14,6 @@ from typing import TYPE_CHECKING, Any, override
 
 from flask_principal import Need, UserNeed
 from invenio_access import action_factory
-from invenio_access.models import ActionRoles, ActionUsers
-from invenio_administration.generators import (
-    Administration,
-    administration_access_action,
-)
 from invenio_records_permissions import RecordPermissionPolicy
 from invenio_records_permissions.generators import (
     AnyUser,
@@ -26,8 +21,11 @@ from invenio_records_permissions.generators import (
     Generator,
     SystemProcess,
 )
-from oarepo_runtime.services.generators import AdministrationWithQueryFilter, ActionQueryFilterMixin
-from opensearch_dsl.query import MatchAll, MatchNone, Term
+from oarepo_runtime.services.generators import (
+    ActionQueryFilterMixin,
+    AdministrationWithQueryFilter,
+)
+from opensearch_dsl.query import MatchNone, Term
 
 if TYPE_CHECKING:
     from collections.abc import Collection
