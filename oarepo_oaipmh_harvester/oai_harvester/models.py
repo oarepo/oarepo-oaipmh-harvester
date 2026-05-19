@@ -11,12 +11,11 @@
 from __future__ import annotations
 
 from invenio_db import db
-from invenio_records.models import Timestamp
 from invenio_users_resources.records.models import AggregateMetadata
 from sqlalchemy_utils.types import JSONType
 
 
-class OAIHarvester(db.Model, Timestamp):
+class OAIHarvester(db.Model, db.Timestamp):
     """Metadata about an OAI-PMH harvester."""
 
     __tablename__ = "oai_harvesters"
