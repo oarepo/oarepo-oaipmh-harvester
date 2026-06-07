@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "oarepo-oai-pmh-harvester"
-version = "8.0.0"
+version = "9.0.0"
 description = 'OAIPMH harvester for Invenio repositories'
 readme = "README.md"
 requires-python = ">=3.13,<3.15"
@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "oarepo[rdm,tests]>=14.0.0,<15.0.0",
-    "invenio-jobs>=9.0.0,<10.0.0",
+    "invenio-jobs>=10.0.0,<11.0.0",
     "invenio-oaipmh-scythe>=0.13.0",
     "json5",
     "rich", # for cmdline pretty printing
@@ -46,7 +46,7 @@ dev = [
 ]
 tests = [
     "pytest-oarepo",
-    "oarepo-model>=3.0.0,<4.0.0",
+    "oarepo-model>=4.0.0,<5.0.0",
     "pytest-mock"
 ]
 oarepo14=[
