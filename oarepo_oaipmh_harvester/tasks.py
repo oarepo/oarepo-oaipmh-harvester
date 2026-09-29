@@ -10,7 +10,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
+from functools import lru_cache
 from typing import cast
 
 import json5
@@ -21,6 +22,50 @@ from invenio_vocabularies.datastreams.factories import DataStreamFactory
 
 from oarepo_oaipmh_harvester.oai_harvester.api import OAIHarvesterAggregate
 from oarepo_oaipmh_harvester.oai_harvester.models import OAIHarvester
+
+
+_SECONDS_GRANULARITY = "YYYY-MM-DDThh:mm:ssZ"
+
+
+@lru_cache(maxsize=32)
+def _oai_granularity(base_url: str) -> str | None:
+    """Return the granularity advertised by the OAI-PMH Identify verb (cached).
+
+    Returns None if the probe fails - callers should fall back to the most
+    restrictive date-only format, which is legal under both granularities.
+    Note: results are cached for the process lifetime, so a granularity change
+    on the server side requires a worker restart to take effect.
+    """
+    try:
+        from oaipmh_scythe import Scythe
+
+        return getattr(Scythe(base_url).identify(), "granularity", None)
+    except Exception:  # noqa BLE001 - best-effort probe
+        current_app.logger.warning(
+            "Could not probe Identify granularity of %s, assuming date-only", base_url, exc_info=True
+        )
+        return None
+
+
+def format_oaipmh_datestamp(since: datetime | str, base_url: str) -> str:
+    """Format `since` as an OAI-PMH datestamp matching the server granularity.
+
+    OAI-PMH repositories that advertise ``YYYY-MM-DD`` granularity (e.g. the
+    ASEP ARL server) reject any time component, while ``...+00:00`` offsets
+    produced by ``datetime.isoformat()`` are illegal in both granularities.
+    Seconds-granularity servers get ``YYYY-MM-DDThh:mm:ssZ`` (UTC), others a
+    bare ``YYYY-MM-DD``.
+    """
+    if isinstance(since, str):
+        import arrow
+
+        since = arrow.get(since).datetime
+    if since.utcoffset() is None:
+        since = since.astimezone()  # interpret naive input as local time
+    since = since.astimezone(timezone.utc)
+    if _oai_granularity(base_url) == _SECONDS_GRANULARITY:
+        return since.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return since.date().isoformat()
 
 
 @shared_task
@@ -78,8 +123,8 @@ def create_readers(
     if "set" not in reader_args and harvester.setspec:
         reader_args["set"] = harvester.setspec
     if "from_date" not in reader_args and since:
-        if since and isinstance(since, datetime):
-            since = since.isoformat()
+        if isinstance(since, datetime | str):
+            since = format_oaipmh_datestamp(since, reader_args["base_url"])
         reader_args["from_date"] = since
     if oai_ids is not None:
         reader_args["identifiers"] = oai_ids

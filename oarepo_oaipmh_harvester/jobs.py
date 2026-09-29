@@ -56,6 +56,8 @@ class OAIHarvestJob(JobType):
     ) -> dict:
         """Build task arguments for the job."""
         if since and isinstance(since, datetime):
+            # keep full ISO here; create_readers formats it to the
+            # OAI-PMH datestamp granularity advertised by the target server
             since = since.isoformat()
         return {
             "harvester_id": cls.id.replace("harvest_oaipmh_records_", ""),
