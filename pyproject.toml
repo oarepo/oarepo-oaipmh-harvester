@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "oarepo-oai-pmh-harvester"
-version = "9.1.0"
+version = "9.2.0"
 description = 'OAIPMH harvester for Invenio repositories'
 readme = "README.md"
 requires-python = ">=3.13,<3.15"
@@ -46,7 +46,7 @@ dev = [
 ]
 tests = [
     "pytest-oarepo",
-    "oarepo-model>=4.0.0,<5.0.0",
+    "oarepo-model>=5.0.0,<6.0.0",
     "pytest-mock"
 ]
 oarepo14=[
@@ -110,6 +110,9 @@ harvest_action = "oarepo_oaipmh_harvester.permissions:harvest_action"
 
 [project.entry-points."flask.commands"]
 oai = "oarepo_oaipmh_harvester.cli:oai_cli"
+
+[project.entry-points."oarepo.fixtures"]
+oai_harvesters = "oarepo_oaipmh_harvester.fixtures:HarvestersFixture"
 
 [tool.hatch.build.targets.sdist]
 packages = ["oarepo_oaipmh_harvester"]
