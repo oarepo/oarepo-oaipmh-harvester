@@ -144,7 +144,7 @@ def list_harvesters(json_output: bool) -> None:
 )
 @click.option("--comment", default="", help="Comment")
 @with_appcontext
-def create_harvester(  # noqa: PLR0913  # many parameters
+def create_harvester(  # noqa: PLR0917,PLR0913  # many parameters
     id: str,  # noqa: A002 # shadows built-in
     name: str,
     base_url: str,
@@ -219,7 +219,7 @@ def create_harvester(  # noqa: PLR0913  # many parameters
 )
 @click.option("--comment", help="Comment")
 @with_appcontext
-def update_harvester(  # noqa: PLR0913  # many parameters
+def update_harvester(  # noqa: PLR0913,PLR0917  # many parameters
     harvester_id: str,
     name: str | None,
     base_url: str | None,
