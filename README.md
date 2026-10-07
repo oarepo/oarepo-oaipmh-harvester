@@ -46,15 +46,18 @@ Optional extras:
 from invenio_access.permissions import system_identity
 from oarepo_oaipmh_harvester.proxies import current_oai_harvester_service
 
-current_oai_harvester_service.create(system_identity, {
-    "id": "zenodo",
-    "name": "Zenodo OAI",
-    "base_url": "https://zenodo.org/oai2d",
-    "metadata_prefix": "oai_dc",
-    "loader": "oai-pmh",
-    "transformers": ['oai-import{model:"rdmrecord"}'],
-    "writers": ['oai-service{model:"rdmrecord",update:true}']
-})
+current_oai_harvester_service.create(
+    system_identity,
+    {
+        "id": "zenodo",
+        "name": "Zenodo OAI",
+        "base_url": "https://zenodo.org/oai2d",
+        "metadata_prefix": "oai_dc",
+        "loader": "oai-pmh",
+        "transformers": ['oai-import{model:"rdmrecord"}'],
+        "writers": ['oai-service{model:"rdmrecord",update:true}'],
+    },
+)
 ```
 
 ### 2. Configurable Harvest Pipeline

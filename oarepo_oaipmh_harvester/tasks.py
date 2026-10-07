@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 from typing import cast
 
@@ -22,7 +22,6 @@ from invenio_vocabularies.datastreams.factories import DataStreamFactory
 
 from oarepo_oaipmh_harvester.oai_harvester.api import OAIHarvesterAggregate
 from oarepo_oaipmh_harvester.oai_harvester.models import OAIHarvester
-
 
 _SECONDS_GRANULARITY = "YYYY-MM-DDThh:mm:ssZ"
 
@@ -40,7 +39,7 @@ def _oai_granularity(base_url: str) -> str | None:
         from oaipmh_scythe import Scythe
 
         return getattr(Scythe(base_url).identify(), "granularity", None)
-    except Exception:  # noqa BLE001 - best-effort probe
+    except Exception:
         current_app.logger.warning(
             "Could not probe Identify granularity of %s, assuming date-only", base_url, exc_info=True
         )
@@ -59,13 +58,16 @@ def format_oaipmh_datestamp(since: datetime | str, base_url: str) -> str:
     if isinstance(since, str):
         import arrow
 
-        since = arrow.get(since).datetime
-    if since.utcoffset() is None:
-        since = since.astimezone()  # interpret naive input as local time
-    since = since.astimezone(timezone.utc)
+        since_dt = arrow.get(since).datetime
+    else:
+        since_dt = since
+
+    if since_dt.utcoffset() is None:
+        since_dt = since_dt.astimezone()  # interpret naive input as local time
+    since_dt = since_dt.astimezone(UTC)
     if _oai_granularity(base_url) == _SECONDS_GRANULARITY:
-        return since.strftime("%Y-%m-%dT%H:%M:%SZ")
-    return since.date().isoformat()
+        return cast("str", since_dt.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    return cast("str", since_dt.date().isoformat())
 
 
 @shared_task

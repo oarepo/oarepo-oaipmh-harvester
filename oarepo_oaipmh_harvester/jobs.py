@@ -51,7 +51,7 @@ class OAIHarvestJob(JobType):
     def build_task_arguments(
         cls,
         job_obj: Job,  # noqa ARG003 for interface compatibility
-        since: None | datetime | str = None,
+        since: datetime | str | None = None,
         **kwargs: Any,
     ) -> dict:
         """Build task arguments for the job."""

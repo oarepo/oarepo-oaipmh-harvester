@@ -30,7 +30,7 @@ class OAIHarvesterItem(RecordItem):
 
     _data: dict | None
 
-    def __init__(  # noqa: PLR0913 # too many arguments
+    def __init__(  # noqa: PLR0913,PLR0917 # too many arguments
         self,
         service: OAIHarvesterService,
         identity: Identity,
