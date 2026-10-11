@@ -8,7 +8,7 @@
         <record>
             <header status="deleted">
                 <identifier>oai:zenodo.org:2</identifier>
-                <datestamp>2023-10-12T14:26:07Z</datestamp>
+                <datestamp>2023-10-13T14:26:07Z</datestamp>
                 <setSpec>user-pyhep2023</setSpec>
                 <setSpec>openaire</setSpec>
             </header>

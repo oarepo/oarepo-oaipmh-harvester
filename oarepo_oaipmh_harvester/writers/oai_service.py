@@ -25,6 +25,7 @@ from invenio_pidstore.errors import PersistentIdentifierError, PIDDeletedError
 from invenio_pidstore.models import PersistentIdentifier, PIDStatus
 from invenio_rdm_records.records.systemfields.deletion_status import RecordDeletionStatusEnum
 from invenio_records.dictutils import dict_lookup
+from invenio_records_resources.services.uow import RecordIndexOp
 from invenio_vocabularies.datastreams.writers import BaseWriter
 from oarepo_runtime import current_runtime
 from sqlalchemy.orm.exc import NoResultFound
@@ -47,8 +48,21 @@ if TYPE_CHECKING:
     from invenio_vocabularies.datastreams.datastreams import StreamEntry
 
 
-# TODO: the writer does not solve the case of dangling draft records
 MAX_TRACEBACK_VARIABLE_LENGTH = 100
+
+
+def _utc_datestamp(datestamp: str | datetime.datetime) -> datetime.datetime:
+    """Parse an OAI datestamp into an aware UTC datetime, as stored in the db column.
+
+    The header datestamp is a string (``2025-01-01`` or ``2025-01-01T00:00:00Z``); without
+    parsing it never equals the stored value and every harvest re-writes every record.
+    OAI-PMH datestamps are always UTC, so a value without timezone is taken as UTC.
+    """
+    if isinstance(datestamp, str):
+        datestamp = datetime.datetime.fromisoformat(datestamp)
+    if datestamp.tzinfo is None:
+        return datestamp.replace(tzinfo=datetime.UTC)
+    return datestamp.astimezone(datetime.UTC)
 
 
 class LocalState(StrEnum):
@@ -131,15 +145,16 @@ class LocalRecord:
             if deletion_status is not None and deletion_status.is_deleted:
                 state = LocalState.TOMBSTONED
             else:
-                return cls(LocalState.LIVE, pid_value, is_rdm, record)
+                state = LocalState.LIVE
 
         draft = None
         if with_drafts:
             draft_cls = cast("DraftRecordService", service).draft_cls
-            # registered_only=False - drafts that were never published have a NEW pid
+            # registered_only=False - drafts that were never published have a NEW pid;
+            # the soft-deleted draft of a published record does not resolve
             with contextlib.suppress(PersistentIdentifierError, NoResultFound):
                 draft = draft_cls.pid.resolve(pid_value, registered_only=False)
-        if draft is not None and state is not LocalState.TOMBSTONED:
+        if draft is not None and state in (LocalState.ABSENT, LocalState.HARD_DELETED):
             state = LocalState.DRAFT_ONLY
         return cls(state, pid_value, is_rdm, record, draft, deleted_pid)
 
@@ -154,6 +169,9 @@ class LocalRecord:
                 case LocalState.LIVE:
                     return Operation.DELETE_RECORD if self.is_rdm else Operation.DELETE
                 case LocalState.DRAFT_ONLY:
+                    return Operation.DELETE_DRAFT
+                case LocalState.TOMBSTONED if self.draft is not None:
+                    # deleted locally, but a local edit draft survived
                     return Operation.DELETE_DRAFT
                 case _:
                     # already deleted locally (tombstoned / hard deleted) or never existed
@@ -226,7 +244,7 @@ class OAIServiceWriter(BaseWriter):
 
         # 0. extract the record oai identifier
         oai_identifier = stream_entry.entry["oai_record"].header.identifier
-        oai_datestamp = stream_entry.entry["oai_record"].header.datestamp
+        oai_datestamp = _utc_datestamp(stream_entry.entry["oai_record"].header.datestamp)
         oai_deleted = stream_entry.entry["oai_record"].header.deleted
 
         # 1. check if there is an OAI record already
@@ -238,19 +256,19 @@ class OAIServiceWriter(BaseWriter):
             oai_record,
         )
 
-        # 2. if exists, check if the record is already up to date
-        if self._check_up_to_date(stream_entry, oai_record, oai_datestamp, oai_deleted):
-            return stream_entry
-
         pid_value = oai_record.record_pid if oai_record else None
         if not pid_value and not oai_deleted:
             pid_value = self._get_pid_value_from_record(transformed_data)
 
-        # 3. find out the state of the local record
+        # 2. find out the state of the local record
         local = LocalRecord.resolve(self.service, pid_value, with_drafts=self._publish)
 
-        # 4. decide on operation type
+        # 3. decide on operation type
         op_type = local.operation(oai_deleted)
+
+        # 4. if exists, check if the record is already up to date
+        if self._check_up_to_date(stream_entry, oai_record, oai_datestamp, oai_deleted, local):
+            return stream_entry
         current_app.logger.debug(
             "Determined operation type '%s' for OAI identifier %s (pid_value=%s, local state=%s)",
             op_type,
@@ -378,7 +396,13 @@ class OAIServiceWriter(BaseWriter):
         oai_record: OAIHarvestedRecord | None,
         oai_datestamp: datetime.datetime,
         oai_deleted: bool,
+        local: LocalRecord,
     ) -> bool:
+        """Check if the local record already reflects the harvested one, so writing can be skipped.
+
+        Besides unchanged oai metadata, the local record must be in the harvested state -
+        a record deleted or restored locally since the last harvest is written again.
+        """
         if not oai_record:
             return False
 
@@ -389,6 +413,17 @@ class OAIServiceWriter(BaseWriter):
             and oai_record.has_errors is False
             and oai_record.has_warnings is False
         ):
+            op_type = local.operation(oai_deleted)
+            if oai_deleted:
+                # up to date only if the local record is deleted (or absent) as well
+                if op_type is Operation.NOOP:
+                    stream_entry.entry["record"] = None
+                    return True
+                return False
+            if op_type is not Operation.UPDATE or local.draft is not None:
+                # local record is not live (deleted, draft only, missing) or has a local
+                # edit draft - write it (the draft gets overwritten and published)
+                return False
             # try to read the existing record
             try:
                 fetched_record = self.service.read(system_identity, oai_record.record_pid)
@@ -504,6 +539,7 @@ class OAIServiceWriter(BaseWriter):
                 return self._update(record_data, pid_value, uow)
             case Operation.DELETE:
                 self.service.delete(self._identity, pid_value, uow=uow)
+                self._delete_local_draft(local, uow)
                 return None
             case Operation.DELETE_RECORD:
                 rdm_service.delete_record(
@@ -512,11 +548,24 @@ class OAIServiceWriter(BaseWriter):
                     {"note": f"Deleted at the OAI-PMH source ({oai_identifier})", "is_visible": True},
                     uow=uow,
                 )
+                self._delete_local_draft(local, uow)
                 return None
             case Operation.DELETE_DRAFT:
-                draft_service.delete_draft(self._identity, pid_value, uow=uow)
+                self._delete_local_draft(local, uow)
                 return None
         raise ValueError(f"Unknown operation type: {op_type}")
+
+    def _delete_local_draft(self, local: LocalRecord, uow: UnitOfWork) -> None:
+        """Delete a local edit draft of a record deleted at the source.
+
+        ``delete_record`` (now or when the record was tombstoned locally) removes the draft
+        from the index but keeps it in the db, while ``delete_draft`` fails if the draft is
+        not indexed - so index it first (the ops run in order on commit).
+        """
+        if local.draft is not None:
+            draft_service = cast("DraftRecordService", self.service)
+            uow.register(RecordIndexOp(local.draft, indexer=draft_service.indexer))
+            draft_service.delete_draft(self._identity, cast("str", local.pid_value), uow=uow)
 
     def _revive(self, local: LocalRecord) -> None:
         """Bring a hard deleted record back with its original pid.
