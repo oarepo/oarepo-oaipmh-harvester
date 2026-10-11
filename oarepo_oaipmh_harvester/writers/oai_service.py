@@ -325,10 +325,10 @@ class OAIServiceWriter(BaseWriter):
         if not oai_record:
             oai_record = OAIHarvestedRecord(
                 oai_identifier=oai_identifier,
-                datestamp=oai_datestamp,
-                deleted=oai_deleted,
                 harvester_id=self._harvester_id,
             )
+        oai_record.datestamp = oai_datestamp
+        oai_record.deleted = oai_deleted
         # store errors and warnings
         oai_record.errors = [self._convert_stream_error(e) for e in (stream_entry.errors or [])]
         if exception_raised is not None:

@@ -14,11 +14,14 @@ import pytest
 from flask import current_app
 from flask_resources.deserializers import DeserializerMixin
 from invenio_access.models import ActionUsers
+from invenio_access.permissions import system_identity
 from invenio_app.factory import create_app as _create_app
 from lxml import etree
 from oarepo_model.api import model
 from oarepo_model.customizations import AddMetadataImport
 from oarepo_model.presets.records_resources import records_resources_preset
+
+from oarepo_oaipmh_harvester.proxies import current_oai_harvester_service
 
 RawEntry = tuple[str | None, str]
 LocalizedEntry = dict[str, str]
@@ -222,3 +225,23 @@ def user_with_administration_rights(app, db, users):
     yield user
     db.session.delete(act)
     db.session.commit()
+
+
+@pytest.fixture
+def harvester(app, db, search_clear):
+    harvester_data = {
+        "id": "test",
+        "name": "Test Harvester",
+        "base_url": "https://zenodo.org/oai2d",
+        "metadata_prefix": "oai_dc",
+        "setspec": "",
+        "loader": "oai-pmh",
+        "transformers": ['oai-import{"model":"test"}'],
+        "writers": ['oai-service{"model":"test","update":true,"publish":false}'],
+        "harvest_managers": ["1"],
+        "comment": "This is a test harvester.",
+    }
+
+    current_oai_harvester_service.create(system_identity, harvester_data)
+    db.session.commit()
+    return "test"
