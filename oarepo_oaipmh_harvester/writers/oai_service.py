@@ -41,7 +41,7 @@ other services with ``delete``.
 from __future__ import annotations
 
 import contextlib
-import datetime
+import datetime as dt
 import json
 from dataclasses import dataclass
 from enum import StrEnum
@@ -58,7 +58,7 @@ from invenio_records.dictutils import dict_lookup
 from invenio_records_resources.services.uow import RecordIndexOp
 from invenio_vocabularies.datastreams.writers import BaseWriter
 from oarepo_runtime import current_runtime
-from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy.exc import NoResultFound
 
 from oarepo_oaipmh_harvester.oai_record.models import (
     OAIHarvestedRecord,
@@ -81,7 +81,7 @@ if TYPE_CHECKING:
 MAX_TRACEBACK_VARIABLE_LENGTH = 100
 
 
-def _utc_datestamp(datestamp: str | datetime.datetime) -> datetime.datetime:
+def _utc_datestamp(datestamp: str | dt.datetime) -> dt.datetime:
     """Parse an OAI datestamp into an aware UTC datetime, as stored in the db column.
 
     The header datestamp is a string (``2025-01-01`` or ``2025-01-01T00:00:00Z``); without
@@ -89,10 +89,10 @@ def _utc_datestamp(datestamp: str | datetime.datetime) -> datetime.datetime:
     OAI-PMH datestamps are always UTC, so a value without timezone is taken as UTC.
     """
     if isinstance(datestamp, str):
-        datestamp = datetime.datetime.fromisoformat(datestamp)
+        datestamp = dt.datetime.fromisoformat(datestamp)
     if datestamp.tzinfo is None:
-        return datestamp.replace(tzinfo=datetime.UTC)
-    return datestamp.astimezone(datetime.UTC)
+        return datestamp.replace(tzinfo=dt.UTC)
+    return datestamp.astimezone(dt.UTC)
 
 
 class LocalState(StrEnum):
@@ -282,7 +282,7 @@ class OAIServiceWriter(BaseWriter):
     ) -> StreamEntry:
         """Write the input entry using a given service."""
         current_app.logger.debug("Writing entry: %s", stream_entry.entry)
-        harvested_at = datetime.datetime.now(datetime.UTC)
+        harvested_at = dt.datetime.now(dt.UTC)
         original_data = {"oai_payload": stream_entry.entry["oai_record"].raw}
         transformed_data = stream_entry.entry["record"]
 
@@ -438,7 +438,7 @@ class OAIServiceWriter(BaseWriter):
         self,
         stream_entry: StreamEntry,
         oai_record: OAIHarvestedRecord | None,
-        oai_datestamp: datetime.datetime,
+        oai_datestamp: dt.datetime,
         oai_deleted: bool,
         local: LocalRecord,
     ) -> bool:
@@ -497,9 +497,9 @@ class OAIServiceWriter(BaseWriter):
         self,
         oai_record: OAIHarvestedRecord | None,
         oai_identifier: str,
-        oai_datestamp: datetime.datetime,
+        oai_datestamp: dt.datetime,
         oai_deleted: bool,
-        harvested_at: datetime.datetime,
+        harvested_at: dt.datetime,
         original_data: dict,
         transformed_data: dict | None,
         stream_entry: StreamEntry,
@@ -574,7 +574,7 @@ class OAIServiceWriter(BaseWriter):
             case Operation.UPDATE:
                 return self._update(record_data, local, uow)
             case Operation.RESTORE:
-                if local.record is not None and local.record.deletion_status == RecordDeletionStatusEnum.MARKED:
+                if getattr(local.record, "deletion_status", None) == RecordDeletionStatusEnum.MARKED:
                     rdm_service.unmark_record_for_purge(self._identity, pid_value, uow=uow)
                 rdm_service.restore_record(self._identity, pid_value, uow=uow)
                 return self._update(record_data, local, uow)
@@ -620,12 +620,14 @@ class OAIServiceWriter(BaseWriter):
         """
         record = cast("Record", local.record)
         pid = cast("PersistentIdentifier", local.deleted_pid)
-        last_revision = next((r for r in reversed(record.revisions) if r.model.json is not None), None)
-        if last_revision is None:
+        last_revision_id = next(
+            (r.revision_id for r in reversed(record.revisions) if r.model is not None and r.model.json is not None),
+            None,
+        )
+        if last_revision_id is None:
             raise ValueError(f"Hard deleted record {local.pid_value} has no revision to revive from.")
-        pid.status = PIDStatus.REGISTERED
-        db.session.add(pid)
-        record.revert(last_revision.revision_id)
+        pid.sync_status(PIDStatus.REGISTERED)
+        record.revert(last_revision_id)
 
     def _update(self, record_data: dict, local: LocalRecord, uow: UnitOfWork) -> dict:
         """Update a live record; draft services do not allow direct update, so go through a draft."""

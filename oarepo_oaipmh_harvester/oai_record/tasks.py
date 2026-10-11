@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 from celery import shared_task
 from invenio_db import db
@@ -24,7 +24,7 @@ def index_oai_records() -> None:
     """Reindex OAI data."""
     oai_records = (
         db.session.query(OAIHarvestedRecord.id)
-        .filter(OAIHarvestedRecord.last_update_time > datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=1))
+        .filter(OAIHarvestedRecord.last_update_time > dt.datetime.now(dt.UTC) - dt.timedelta(days=1))
         .yield_per(1000)
     )
 
