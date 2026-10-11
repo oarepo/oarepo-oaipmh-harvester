@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 
 def _current_app_object() -> Flask:
-    """Return the real application object behind the ``current_app`` proxy (signal sender)."""
+    """Return the real application object behind the `current_app` proxy (signal sender)."""
     return cast("LocalProxy[Flask]", current_app)._get_current_object()  # noqa: SLF001
 
 

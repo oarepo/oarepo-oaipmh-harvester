@@ -3,16 +3,17 @@
 
 """Flask extension of the OAI-PMH harvester.
 
-:meth:`OARepoOAIHarvesterExt.init_config` registers the ``oai-import`` transformer and the
-``oai-service`` writer in ``VOCABULARIES_DATASTREAM_TRANSFORMERS`` / ``_WRITERS`` and sets
-the defaults from :mod:`oarepo_oaipmh_harvester.config`.
+[OARepoOAIHarvesterExt.init_config][oarepo_oaipmh_harvester.ext.OARepoOAIHarvesterExt.init_config]
+registers the `oai-import` transformer and the `oai-service` writer in
+`VOCABULARIES_DATASTREAM_TRANSFORMERS` / `_WRITERS` and sets the defaults from
+[config][oarepo_oaipmh_harvester.config].
 
 The services and resources are created lazily and can be replaced by configuration
-(import strings): ``OAI_HARVESTER_SERVICE``, ``OAI_HARVESTER_SERVICE_CONFIG``,
-``OAI_HARVESTER_RESOURCE``, ``OAI_HARVESTER_RESOURCE_CONFIG``, ``OAI_RECORD_SERVICE``,
-``OAI_RECORD_SERVICE_CONFIG``, ``OAI_RECORD_RESOURCE``, ``OAI_RECORD_RESOURCE_CONFIG``.
-:func:`finalize_apps` registers the services and indexers and the invenio-jobs job types
-of all harvesters stored in the database.
+(import strings): `OAI_HARVESTER_SERVICE`, `OAI_HARVESTER_SERVICE_CONFIG`,
+`OAI_HARVESTER_RESOURCE`, `OAI_HARVESTER_RESOURCE_CONFIG`, `OAI_RECORD_SERVICE`,
+`OAI_RECORD_SERVICE_CONFIG`, `OAI_RECORD_RESOURCE`, `OAI_RECORD_RESOURCE_CONFIG`.
+[finalize_apps][oarepo_oaipmh_harvester.ext.finalize_apps] registers the services and
+indexers and the invenio-jobs job types of all harvesters stored in the database.
 """
 
 from __future__ import annotations

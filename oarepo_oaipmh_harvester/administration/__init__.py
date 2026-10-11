@@ -3,9 +3,9 @@
 
 """invenio-administration views for harvesters and harvest records.
 
-The views are registered via the ``invenio_administration.views`` entry point. Access is
+The views are registered via the `invenio_administration.views` entry point. Access is
 granted to administrators and to harvest managers of any harvester (see
-``oai_harvester_permissions_decorator``); what each user sees is then limited by the
+`oai_harvester_permissions_decorator`); what each user sees is then limited by the
 service permission policies.
 """
 
