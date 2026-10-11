@@ -61,7 +61,7 @@ log = logging.getLogger(__name__)
 
 
 class OAIHarvesterSearchOptions(SearchOptions, SearchOptionsMixin):
-    """Search options."""
+    """Search options for harvesters."""
 
     pagination_options: Mapping[str, Any] = {
         "default_results_per_page": 25,
@@ -106,7 +106,7 @@ class RecordLink(Link):
 
 
 class OAIHarvesterServiceConfig(RecordServiceConfig, ConfiguratorMixin):
-    """Requests service configuration."""
+    """Harvester service configuration."""
 
     # common configuration
     permission_policy_cls = OAIHarvesterPermissionPolicy
@@ -213,7 +213,7 @@ class OAIHarvesterService(RecordService):
         expand: bool = False,
         **kwargs: Any,
     ) -> RecordList:
-        """Search for oai_records."""
+        """Search harvesters."""
         self.require_permission(identity, "search")
 
         return super().search(
@@ -227,7 +227,7 @@ class OAIHarvesterService(RecordService):
 
     @override
     def read(self, identity: Identity, id_: str, expand: bool = False, action: str = "read") -> RecordItem:
-        """Retrieve a oai_record."""
+        """Retrieve a single harvester."""
         # resolve and require permission
         oai_record = OAIHarvesterAggregate.get_record(id_)
         if oai_record is None:
@@ -254,7 +254,7 @@ class OAIHarvesterService(RecordService):
         expand: bool = False,
         **kwargs: Any,
     ) -> RecordItem:
-        """Replace a record."""
+        """Update a harvester."""
         record = OAIHarvesterAggregate.get_record(id_)
 
         # Permissions
@@ -290,7 +290,7 @@ class OAIHarvesterService(RecordService):
         revision_id: int | None = None,
         **kwargs: Any,
     ) -> bool:
-        """Delete a record from database and search indexes."""
+        """Delete a harvester from the database and the search index."""
         record = OAIHarvesterAggregate.get_record(id_)
 
         # Permissions
@@ -302,13 +302,13 @@ class OAIHarvesterService(RecordService):
 
     @override
     def rebuild_index(self, identity: Identity, uow: UnitOfWork | None = None) -> bool:
-        """Reindex all oai_records managed by this service."""
+        """Reindex all harvesters."""
         oai_harvesters = db.session.query(OAIHarvester.id).yield_per(1000)
         self.indexer.bulk_index([u.id for u in oai_harvesters])
         return True
 
     def harvest(self, identity: Identity, id_: str) -> RecordItem:
-        """Re-harvest a oai_harvester."""
+        """Start a harvest of the harvester's source."""
         # resolve and require permission
         oai_harvester = OAIHarvesterAggregate.get_record(id_)
         if oai_harvester is None:

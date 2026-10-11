@@ -50,4 +50,4 @@ class OAIHarvesterSchema(BaseRecordSchema):
     """The list of writers."""
 
     harvest_managers = fields.List(fields.Nested(HarvestManagerSchema), load_default=list)
-    """The list of writers."""
+    """The list of harvest managers."""

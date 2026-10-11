@@ -19,7 +19,7 @@ class OAIHarvestedRecordSchema(BaseRecordSchema):
     record_pid = fields.String(allow_none=True)
     """The persistent identifier of the record."""
     datestamp = fields.DateTime(required=True)
-    """The datestamp of the record."""
+    """The OAI datestamp of the record."""
     harvested_at = fields.DateTime(required=True)
     """The time when the record was harvested."""
     deleted = fields.Boolean(default=False, required=True)
@@ -29,10 +29,10 @@ class OAIHarvestedRecordSchema(BaseRecordSchema):
     has_warnings = fields.Boolean(default=False, required=True)
     """True if the record has warnings during the harvest."""
     errors = fields.List(fields.Dict(default=dict, load_default=dict))
-    """Errors."""
+    """Errors from the last write of the local record."""
     original_data = fields.Dict(default=dict, load_default=dict)
-    """Original data."""
+    """Original data as harvested from the OAI-PMH source."""
     transformed_data = fields.Dict(default=dict, load_default=dict)
-    """Transformed data."""
+    """Data after transformation, as written to the local record."""
     run_id = fields.String(required=True)
-    """The run ID of the record."""
+    """ID of the harvest run (invenio-jobs) that produced the record."""

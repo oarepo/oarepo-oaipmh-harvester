@@ -16,7 +16,7 @@ from .models import OAIHarvestedRecord
 
 @shared_task
 def index_oai_records() -> None:
-    """Reindex OAI data."""
+    """Reindex harvested records updated in the last day."""
     oai_records = (
         db.session.query(OAIHarvestedRecord.id)
         .filter(OAIHarvestedRecord.last_update_time > dt.datetime.now(dt.UTC) - dt.timedelta(days=1))

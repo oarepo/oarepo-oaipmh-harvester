@@ -124,12 +124,12 @@ class OAIHarvestedRecord(db.Model):
 
 
 class OAIRecordAggregateModel(AggregateMetadata):
-    """OAI Run aggregate data model."""
+    """Aggregate data model for harvested OAI-PMH records."""
 
     _model_obj: OAIHarvestedRecord | None
 
     # If you add properties here you likely also want to add a ModelField on
-    # the UserAggregate API class.
+    # the OAIRecordAggregate API class.
     _properties = (
         "oai_identifier",
         "record_pid",
@@ -152,7 +152,7 @@ class OAIRecordAggregateModel(AggregateMetadata):
     @property
     @override
     def model_obj(self) -> OAIHarvestedRecord:
-        """The actual model object behind this user aggregate."""
+        """The actual model object behind this record aggregate."""
         if self._model_obj is None:
             id_ = (self._data or {}).get("id")
             with db.session.no_autoflush:

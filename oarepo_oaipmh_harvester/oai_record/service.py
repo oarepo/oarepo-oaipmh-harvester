@@ -58,7 +58,7 @@ log = logging.getLogger(__name__)
 
 
 class OAIRecordSearchOptions(SearchOptions, SearchOptionsMixin):
-    """Search options."""
+    """Search options for harvest records."""
 
     pagination_options: Mapping[str, Any] = {
         "default_results_per_page": 25,
@@ -99,7 +99,7 @@ class RecordLink(Link):
 
 
 class OAIRecordServiceConfig(RecordServiceConfig, ConfiguratorMixin):
-    """Requests service configuration."""
+    """Harvest record service configuration."""
 
     # common configuration
     permission_policy_cls = OAIRecordPermissionPolicy
@@ -144,7 +144,7 @@ class OAIRecordServiceConfig(RecordServiceConfig, ConfiguratorMixin):
 
 
 class OAIRecordService(RecordService):
-    """Users service."""
+    """Service for harvested OAI-PMH records."""
 
     @property
     def oai_record_cls(self) -> type[OAIRecordAggregate]:
@@ -160,7 +160,7 @@ class OAIRecordService(RecordService):
         expand: bool = False,
         **kwargs: Any,
     ) -> RecordList:
-        """Search for oai_records."""
+        """Search harvest records."""
         self.require_permission(identity, "search")
 
         return super().search(
@@ -182,7 +182,7 @@ class OAIRecordService(RecordService):
         action: str = "read",
         **kwargs: Any,
     ) -> RecordItem:
-        """Retrieve a oai_record."""
+        """Retrieve a single harvest record."""
         # resolve and require permission
         oai_record = OAIRecordAggregate.get_record(id_)
         if oai_record is None:
@@ -199,13 +199,13 @@ class OAIRecordService(RecordService):
 
     @override
     def rebuild_index(self, identity: Identity, uow: UnitOfWork | None = None) -> bool:
-        """Reindex all oai_records managed by this service."""
+        """Reindex all harvest records."""
         oai_records = db.session.query(OAIHarvestedRecord.oai_identifier).yield_per(1000)
         self.indexer.bulk_index([u.oai_identifier for u in oai_records])
         return True
 
     def harvest(self, identity: Identity, id_: str) -> RecordItem:
-        """Re-harvest a oai_record."""
+        """Re-harvest a single record from its source."""
         # resolve and require permission
         oai_record = OAIRecordAggregate.get_record(id_)
         if oai_record is None:

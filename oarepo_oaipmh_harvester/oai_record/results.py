@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 class OAIRecordItem(RecordItem):
-    """Single OAI Run result."""
+    """Single harvested record result."""
 
     _data: dict | None
 
@@ -46,11 +46,11 @@ class OAIRecordItem(RecordItem):
 
     @property
     def id(self) -> str:
-        """Identity of the oai_record."""
+        """ID of the record."""
         return str(self._oai_record.id)
 
     def __getitem__(self, key: str):
-        """Key a key from the data."""
+        """Get a field from the serialized record data."""
         return self.data[key]
 
     @property
@@ -67,7 +67,7 @@ class OAIRecordItem(RecordItem):
 
     @property
     def data(self) -> dict[str, Any]:
-        """Property to get the oai_record."""
+        """Serialized record, dumped on first access."""
         if self._data:
             return self._data
 
@@ -90,7 +90,7 @@ class OAIRecordItem(RecordItem):
         return self._errors
 
     def to_dict(self) -> dict[str, Any]:
-        """Get a dictionary for the oai_record."""
+        """Serialize the record result, including errors."""
         res = self.data
         if self._errors:
             res["errors"] = self._errors
@@ -98,7 +98,7 @@ class OAIRecordItem(RecordItem):
 
 
 class OAIRecordList(RecordList):
-    """List of OAI Run results."""
+    """List of harvested record results."""
 
     @property
     @override

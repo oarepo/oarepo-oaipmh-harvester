@@ -43,11 +43,13 @@ class AdministrationDetailJSONSerializer(JSONSerializer):
 
     @override
     def serialize_object(self, obj: Any) -> str:
+        """Serialize a single harvester into the administration detail form."""
         obj = self._convert_to_administration_detail(obj)
         return super().serialize_object(obj)
 
     @override
     def serialize_object_list(self, obj_list: list[Any]) -> str:
+        """Serialize a list of harvesters into the administration detail form."""
         obj_list = [self._convert_to_administration_detail(obj) for obj in obj_list]
         return super().serialize_object_list(obj_list)
 
@@ -60,7 +62,7 @@ class AdministrationDetailJSONSerializer(JSONSerializer):
 
 
 class OAIHarvesterResourceConfig(RecordResourceConfig, ConfiguratorMixin):
-    """OAIHarvesterRecord resource config."""
+    """OAI-PMH harvester resource configuration."""
 
     blueprint_name = "oarepo-oaipmh-harvester"
     url_prefix = "/oai/harvest/harvesters/"
@@ -85,14 +87,14 @@ class OAIHarvesterResourceConfig(RecordResourceConfig, ConfiguratorMixin):
 
 
 class OAIHarvesterResource(RecordResource):
-    """OAIHarvesterRecord resource."""
+    """REST resource for OAI-PMH harvesters."""
 
     def p(self, prefix: str, route: str) -> str:
         """Prefix a route with the URL prefix."""
         return f"{prefix}{route}"
 
     def create_url_rules(self) -> list[dict[str, Any]]:
-        """Create the URL rules for the users resource."""
+        """Create the URL rules for the harvester resource."""
         routes = self.config.routes
         return [
             route("GET", routes["list"], self.search),
@@ -106,7 +108,7 @@ class OAIHarvesterResource(RecordResource):
     @request_view_args
     @response_handler(many=True)
     def search(self) -> tuple[dict[str, Any], int]:
-        """Perform a search over users."""
+        """Search harvesters."""
         hits = self.service.search(
             identity=g.identity,
             params=resource_requestctx.args,
@@ -117,7 +119,7 @@ class OAIHarvesterResource(RecordResource):
     @request_view_args
     @response_handler()
     def read(self) -> tuple[dict[str, Any], int]:
-        """Read an oai harvester."""
+        """Read a single harvester."""
         item = self.service.read(
             id_=resource_requestctx.view_args["pid_value"],
             identity=g.identity,

@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 class OAIRecordAggregate(BaseAggregate):
-    """An aggregate of information about a user."""
+    """An aggregate of information about a harvested record."""
 
     model_cls = OAIRecordAggregateModel  # ty: ignore[invalid-assignment] monkeytype
     """The model class for the request."""
@@ -50,7 +50,7 @@ class OAIRecordAggregate(BaseAggregate):
     record_pid = ModelField("record_pid", dump_type=str)
     """The persistent identifier of the record."""
     datestamp = ModelField("datestamp", dump_type=datetime)
-    """The datestamp of the record."""
+    """The OAI datestamp of the record."""
     harvested_at = ModelField("harvested_at", dump_type=datetime)
     """The time when the record was harvested."""
     deleted = ModelField("deleted", dump_type=bool)
@@ -60,13 +60,13 @@ class OAIRecordAggregate(BaseAggregate):
     has_warnings = ModelField("has_warnings", dump_type=bool)
     """True if the record has warnings during the harvest."""
     errors = ModelField("errors", dump_type=list[dict])
-    """Errors."""
+    """Errors from the last write of the local record."""
     original_data = ModelField("original_data", dump_type=dict)
-    """Original data."""
+    """Original data as harvested from the OAI-PMH source."""
     transformed_data = ModelField("transformed_data", dump_type=dict)
-    """Transformed data."""
+    """Data after transformation, as written to the local record."""
     harvester_id = ModelField("harvester_id", dump_type=str)
-    """The run ID of the record."""
+    """ID of the harvester that harvested the record."""
     harvester = ModelField("harvester", dump=False)
     """The harvester of the record."""
 
@@ -78,7 +78,7 @@ class OAIRecordAggregate(BaseAggregate):
         id_: UUID | None = None,
         **kwargs: Any,
     ) -> OAIRecordAggregate:
-        """Create a new User and store it in the database."""
+        """Create a new harvested record and store it in the database."""
         with db.session.begin_nested():
             record = OAIHarvestedRecord(**data)
             db.session.add(record)
@@ -87,7 +87,7 @@ class OAIRecordAggregate(BaseAggregate):
     @classmethod
     @override
     def get_record(cls, id_: UUID | str, with_deleted: bool = False) -> OAIRecordAggregate:
-        """Get the user via the specified ID."""
+        """Get the harvested record with the specified ID."""
         with db.session.no_autoflush:
             record = OAIHarvestedRecord.query.get(id_)
             return cls.from_model(record)

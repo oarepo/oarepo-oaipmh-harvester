@@ -59,12 +59,12 @@ class OAIHarvester(db.Model, db.Timestamp):
 
 
 class OAIHarvesterAggregateModel(AggregateMetadata):
-    """OAI Run aggregate data model."""
+    """Aggregate data model for OAI-PMH harvesters."""
 
     _model_obj: OAIHarvester | None
 
     # If you add properties here you likely also want to add a ModelField on
-    # the UserAggregate API class.
+    # the OAIHarvesterAggregate API class.
     _properties = (
         "id",
         "base_url",
@@ -96,7 +96,7 @@ class OAIHarvesterAggregateModel(AggregateMetadata):
 
     @property
     def model_obj(self) -> OAIHarvester:
-        """The actual model object behind this user aggregate."""
+        """The actual model object behind this harvester aggregate."""
         if self._model_obj is None:
             _id = (self._data or {}).get("id")
             with db.session.no_autoflush:
