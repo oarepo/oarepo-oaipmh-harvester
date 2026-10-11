@@ -103,12 +103,18 @@ Put `oai_harvesters.yaml` into the instance's `app_data` folder; harvesters are 
   metadata-prefix: oai_datacite
   setspec: user-cesnet
   model: datasets
+  community: cesnet
   harvest-manager:
     - manager@example.org
 ```
 
 `transformer` and `writer` default to `oai-import{model:...}` and `oai-service{model:...}`
 when `model` is given. Harvest managers are e-mail addresses of existing users.
+`community` (optional) is the slug of a community; it is passed as the `community` option
+to every `oai-service` writer, so all harvested records are added to that community.
+
+Load (or reload after editing) the fixture with
+`invenio rdm-records add-to-fixture oai_harvesters`.
 
 ### From the administration UI
 
@@ -145,6 +151,27 @@ Writes the harvested records through the target model's service. Options:
 | `direct_update` | `false` | update published records with `service.update` instead of edit - update draft - publish. Only for models whose service allows updating published records. |
 | `update_all` | `false` | rewrite every record, even if unchanged since the last harvest |
 | `pid_field` | `"id"` | where the record's pid value is in the service result |
+| `community` | - | slug (or id) of a community every written record is added to. Only for RDM models. |
+
+### Communities
+
+Written records are added to the writer's `community` and to the communities a
+transformer lists in the record's `parent.communities.ids` (slugs or ids), so the
+membership can be decided per record:
+
+```python
+record["parent"] = {"communities": {"ids": ["cesnet", "another-community"]}}
+```
+
+Records are added directly (RDM `bulk_add`), without a community inclusion request; a
+subcommunity's parent is added as well, and the community becomes the default one if the
+record has none yet.
+Communities the record is already in are skipped, and records are never removed from a
+community. If a community does not exist, the record is not written and the error is
+stored on the harvested record.
+
+Records unchanged since the last harvest are skipped, so after adding a community to an
+existing harvester run the harvest with `update_all` to add the already harvested records.
 
 ### How records are kept in sync
 

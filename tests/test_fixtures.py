@@ -26,3 +26,35 @@ def test_harvesters_fixture(app, db, search_clear, users):
     assert harvester["transformers"] == ['oai-import{model:"test"}']
     assert harvester["writers"] == ['oai-service{model:"test"}']
     assert harvester["harvest_managers"] == [{"user": str(users[0].id)}]
+
+
+def test_harvesters_fixture_community(app, db, search_clear):
+    fixture = HarvestersFixture(search_paths=[], filename="oai_harvesters.yaml")
+    fixture.create(
+        {
+            "id": "fixture",
+            "name": "Fixture harvester",
+            "base-url": "https://example.org/oai",
+            "metadata-prefix": "oai_dc",
+            "model": "test",
+            "community": "my-community",
+        }
+    )
+    fixture.create(
+        {
+            "id": "fixture-writers",
+            "name": "Fixture harvester with writers",
+            "base-url": "https://example.org/oai",
+            "metadata-prefix": "oai_dc",
+            "writer": ['oai-service{model:"test",publish:false}', "other"],
+            "community": "my-community",
+        }
+    )
+
+    harvester = current_oai_harvester_service.read(system_identity, "fixture").to_dict()
+    assert harvester["writers"] == ['oai-service{"model": "test", "community": "my-community"}']
+    harvester = current_oai_harvester_service.read(system_identity, "fixture-writers").to_dict()
+    assert harvester["writers"] == [
+        'oai-service{"model": "test", "publish": false, "community": "my-community"}',
+        "other",
+    ]

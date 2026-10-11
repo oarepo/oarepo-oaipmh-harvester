@@ -10,6 +10,7 @@ import pytest
 from invenio_access.permissions import system_identity
 from invenio_db import db
 from invenio_pidstore.models import PersistentIdentifier, PIDStatus
+from invenio_rdm_records.proxies import current_rdm_records
 from invenio_vocabularies.datastreams.datastreams import StreamEntry
 from oarepo_runtime import current_runtime
 
@@ -372,3 +373,60 @@ def test_direct_update(app, db, search_clear, external_pid_test_model, location,
     # the local edit draft does not survive the harvest
     assert LocalRecord.resolve(service, pid_value, with_drafts=True).draft is None
     assert _harvest(writer, 2, record=record("Title v2")) is None  # up to date
+
+
+def test_harvest_adds_record_to_communities(
+    app, db, search_clear, rdm_test_model, location, harvester, rdm_record_data, communities, mocker
+):
+    """Records go to the writer's community and to the ones listed in parent.communities.ids."""
+    communities("writer-community", "listed-community")
+    # the test model has its own parent table, invenio's bulk_add can not store the membership here
+    bulk_add = mocker.patch.object(current_rdm_records.record_communities_service, "bulk_add", return_value=[])
+    writer = OAIServiceWriter("rdmtest", publish=True, harvester_id=harvester, community="writer-community")
+    parent = {"communities": {"ids": ["listed-community", "writer-community"]}}
+    record = {**_rdm_data(rdm_record_data, "Title v1"), "parent": parent}
+
+    assert _harvest(writer, 1, record=record) == Operation.CREATE
+    pid_value = _oai_record(db).record_pid
+    # writer's community first, duplicates removed
+    assert [c.args[1:] for c in bulk_add.call_args_list] == [
+        ("writer-community", [pid_value]),
+        ("listed-community", [pid_value]),
+    ]
+    assert all(c.args[0] is system_identity and c.kwargs["uow"] is not None for c in bulk_add.call_args_list)
+    # transformed data is stored as produced by the transformer
+    assert _oai_record(db).transformed_data["parent"] == parent
+
+
+def test_harvest_community_error_rolls_back(
+    app, db, search_clear, rdm_test_model, location, harvester, rdm_record_data, communities, mocker
+):
+    communities("writer-community")
+    mocker.patch.object(
+        current_rdm_records.record_communities_service,
+        "bulk_add",
+        return_value=[{"message": "Community already included."}],
+    )
+    writer = OAIServiceWriter("rdmtest", publish=True, harvester_id=harvester, community="writer-community")
+    writer.write(_entry(dt.datetime(2025, 1, 1, tzinfo=dt.UTC), deleted=False, record=rdm_record_data))
+    oai_record = _oai_record(db)
+    assert oai_record.has_errors is True
+    assert "Community already included." in oai_record.errors[0]["message"]
+    assert writer.service.record_cls.model_cls.query.count() == 0
+
+
+def test_harvest_unknown_community_is_an_error(
+    app, db, search_clear, rdm_test_model, location, harvester, rdm_record_data
+):
+    writer = OAIServiceWriter("rdmtest", publish=True, harvester_id=harvester, community="unknown")
+    writer.write(_entry(dt.datetime(2025, 1, 1, tzinfo=dt.UTC), deleted=False, record=rdm_record_data))
+    oai_record = _oai_record(db)
+    assert oai_record.has_errors is True
+    # the whole write was rolled back
+    assert oai_record.record_pid is None
+    assert writer.service.record_cls.model_cls.query.count() == 0
+
+
+def test_community_requires_rdm_model(app, test_model):
+    with pytest.raises(ValueError, match="communities"):
+        OAIServiceWriter("test", publish=False, community="c")

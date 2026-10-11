@@ -21,6 +21,7 @@ from flask_resources.deserializers import DeserializerMixin
 from invenio_access.models import ActionUsers
 from invenio_access.permissions import system_identity
 from invenio_app.factory import create_app as _create_app
+from invenio_communities.proxies import current_communities
 from invenio_drafts_resources.records.api import DraftRecordIdProviderV2
 from invenio_records_resources.records.systemfields import PIDField
 from invenio_vocabularies.proxies import current_service as current_vocabularies_service
@@ -330,3 +331,21 @@ def rdm_record_data(resource_type_vocabulary):
         },
         "files": {"enabled": False},
     }
+
+
+@pytest.fixture
+def communities(app, db, search_clear, users):
+    """Create communities with the given slugs, return their ids."""
+
+    def _create(*slugs: str) -> list[str]:
+        ids = [
+            current_communities.service.create(
+                users[0].identity,
+                {"slug": slug, "access": {"visibility": "public"}, "metadata": {"title": slug}},
+            ).id
+            for slug in slugs
+        ]
+        current_communities.service.indexer.refresh()
+        return ids
+
+    return _create
