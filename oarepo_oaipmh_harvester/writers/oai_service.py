@@ -7,6 +7,10 @@ Datastream configuration: `oai-service{model:"<model>", ...}`, see
 [OAIServiceWriter][oarepo_oaipmh_harvester.writers.oai_service.OAIServiceWriter] for the
 options.
 
+Entries that failed to be transformed (`errors` / `exc` set, see
+[CatchingTransformer][oarepo_oaipmh_harvester.datastream.CatchingTransformer]) are not written - only
+their errors are stored on the harvest record, the local record is left as it is.
+
 For each harvested entry the writer
 
 1. loads the harvest record
@@ -317,57 +321,64 @@ class OAIServiceWriter(BaseWriter):
             oai_record,
         )
 
-        pid_value = oai_record.record_pid if oai_record else None
-        if not pid_value and not oai_deleted:
-            pid_value = self._get_pid_value_from_record(transformed_data)
-
-        # 2. find out the state of the local record
-        local = LocalRecord.resolve(self.service, pid_value, with_drafts=self._publish)
-
-        # 3. decide on operation type
-        op_type = local.operation(oai_deleted)
-
-        # 4. if exists, check if the record is already up to date
-        if self._check_up_to_date(stream_entry, oai_record, oai_datestamp, oai_deleted, local):
-            return stream_entry
-        current_app.logger.debug(
-            "Determined operation type '%s' for OAI identifier %s (pid_value=%s, local state=%s)",
-            op_type,
-            oai_identifier,
-            pid_value,
-            local.state,
-        )
         written_data = None
         validation_errors: list[dict] = []
         exception_raised = None
+        op_type = None
 
         try:
-            written_data, validation_errors = self._save_and_publish_record(
-                transformed_data,
-                local,
-                op_type,
-                oai_identifier,
-            )
+            if stream_entry.errors or stream_entry.exc is not None:
+                # reading / transformation failed - only the errors are stored on the oai
+                # record, the local record is left as it is
+                current_app.logger.debug("Not writing OAI identifier %s, it has errors", oai_identifier)
+            else:
+                pid_value = oai_record.record_pid if oai_record else None
+                if not pid_value and not oai_deleted:
+                    pid_value = self._get_pid_value_from_record(transformed_data)
+
+                # 2. find out the state of the local record
+                local = LocalRecord.resolve(self.service, pid_value, with_drafts=self._publish)
+
+                # 3. decide on operation type
+                op_type = local.operation(oai_deleted)
+
+                # 4. if exists, check if the record is already up to date
+                if self._check_up_to_date(stream_entry, oai_record, oai_datestamp, oai_deleted, local):
+                    return stream_entry
+                current_app.logger.debug(
+                    "Determined operation type '%s' for OAI identifier %s (pid_value=%s, local state=%s)",
+                    op_type,
+                    oai_identifier,
+                    pid_value,
+                    local.state,
+                )
+
+                written_data, validation_errors = self._save_and_publish_record(
+                    transformed_data,
+                    local,
+                    op_type,
+                    oai_identifier,
+                )
         except Exception as e:  # noqa BLE001 ok to catch here
             # we can't know the state of the db connection, rollback is a safe bet
             db.session.rollback()
             exception_raised = e
-        finally:
-            # In case of exception, the session has been rolled back in the lines
-            # above, so we can safely proceed to store the OAI record
-            self._store_oai_record(
-                oai_record,
-                oai_identifier,
-                oai_datestamp,
-                oai_deleted,
-                harvested_at,
-                original_data,
-                transformed_data,
-                stream_entry,
-                validation_errors,
-                exception_raised,
-                written_data,
-            )
+
+        # In case of exception, the session has been rolled back in the lines
+        # above, so we can safely proceed to store the OAI record
+        self._store_oai_record(
+            oai_record,
+            oai_identifier,
+            oai_datestamp,
+            oai_deleted,
+            harvested_at,
+            original_data,
+            transformed_data,
+            stream_entry,
+            validation_errors,
+            exception_raised,
+            written_data,
+        )
 
         # the datastream api expects error messages; structured errors are on the oai record
         stream_entry.errors = [
@@ -576,7 +587,7 @@ class OAIServiceWriter(BaseWriter):
             errors.append(self._convert_exception_to_error_dict(exception_raised))
         if stream_entry.exc:
             errors.append(self._convert_exception_to_error_dict(stream_entry.exc))
-        oai_record.errors = errors
+        oai_record.errors = json.loads(json.dumps(errors, default=str))
         oai_record.harvested_at = harvested_at
         oai_record.has_errors = bool(oai_record.errors)
         # no warnings tracking for now
@@ -589,9 +600,10 @@ class OAIServiceWriter(BaseWriter):
             oai_record.record_pid = pid
             oai_record.record_type = self._model
 
-        # store the original and transformed data
+        # store the original and transformed data; values that are not json serializable
+        # (dates, lazy strings, ...) would make the commit fail
         oai_record.original_data = original_data
-        oai_record.transformed_data = transformed_data or {}
+        oai_record.transformed_data = json.loads(json.dumps(transformed_data or {}, default=str))
 
         db.session.add(oai_record)
         db.session.commit()
@@ -718,7 +730,10 @@ class OAIServiceWriter(BaseWriter):
             fn = (frame.f_code.co_filename or "").split("site-packages/")[-1]
             formatted_tb.append(f"{frame.f_code.co_name}@{fn}:{tb.tb_lineno}")
             for local_name, local_value in frame.f_locals.items():
-                local_value_str = repr(local_value)
+                try:
+                    local_value_str = repr(local_value)
+                except Exception:  # noqa: BLE001 a broken repr must not prevent storing the error
+                    local_value_str = f"<{type(local_value).__name__}, repr failed>"
                 if len(local_value_str) > MAX_TRACEBACK_VARIABLE_LENGTH:
                     local_value_str = local_value_str[: MAX_TRACEBACK_VARIABLE_LENGTH - 3] + "..."
                 formatted_tb.append(f"    {local_name} = {local_value_str}")
