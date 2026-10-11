@@ -230,6 +230,7 @@ def update_harvester(  # noqa PLR0913,PLR0917 too many arguments
     """Update an existing OAI-PMH harvester."""
 
     def set_if_provided(field: str, value: Any, data: dict[str, Any]) -> None:
+        """Add value to data under field unless it is None or empty."""
         if value is not None and value not in ([], ()):
             data[field] = value
 

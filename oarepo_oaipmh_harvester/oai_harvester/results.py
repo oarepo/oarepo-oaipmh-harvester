@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 class OAIHarvesterItem(RecordItem):
-    """Single OAI Harvester result."""
+    """Single OAI-PMH harvester result."""
 
     _data: dict | None
 
@@ -46,11 +46,11 @@ class OAIHarvesterItem(RecordItem):
 
     @property
     def id(self) -> str:
-        """Identity of the oai_harvester."""
+        """ID of the harvester."""
         return str(self._oai_harvester.id)
 
     def __getitem__(self, key: str) -> Any:
-        """Key a key from the data."""
+        """Get a field from the serialized harvester data."""
         return self.data[key]
 
     @property
@@ -70,7 +70,7 @@ class OAIHarvesterItem(RecordItem):
     @property
     @override
     def data(self) -> dict[str, Any]:
-        """Property to get the oai harvester."""
+        """Serialized harvester, dumped on first access."""
         if self._data:
             return self._data
 
@@ -95,7 +95,7 @@ class OAIHarvesterItem(RecordItem):
 
     @override
     def to_dict(self) -> dict[str, Any]:
-        """Get a dictionary for the oai_harvester."""
+        """Serialize the harvester result, including errors."""
         res = self.data
         if self._errors:
             res["errors"] = self._errors
@@ -103,7 +103,7 @@ class OAIHarvesterItem(RecordItem):
 
 
 class OAIHarvesterList(RecordList):
-    """List of OAI Harvester results."""
+    """List of OAI-PMH harvester results."""
 
     @property
     def hits(self) -> Iterator[dict[str, Any]]:

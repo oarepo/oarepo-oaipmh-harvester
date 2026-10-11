@@ -491,6 +491,7 @@ class OAIServiceWriter(BaseWriter):
         return False
 
     def _get_pid_value_from_record(self, record_data: dict) -> str | None:
+        """Read the pid value from the transformed data via the pid provider, if it supports it."""
         pid_field = getattr(self.service.record_cls.pid, "field", None)
         pid_provider = getattr(pid_field, "_provider", None) if pid_field else None
         get_pid_value_from_record = getattr(pid_provider, "get_pid_value_from_record", None) if pid_provider else None
@@ -664,6 +665,7 @@ class OAIServiceWriter(BaseWriter):
         return [self.write(stream_entry, *args, **kwargs) for stream_entry in stream_entries]
 
     def _convert_exception_to_error_dict(self, exception: Exception) -> dict:
+        """Turn an exception into an error dict with a trimmed traceback and its locals."""
         tb = exception.__traceback__
         formatted_tb = []
         while tb:
@@ -684,6 +686,7 @@ class OAIServiceWriter(BaseWriter):
         }
 
     def _convert_stream_error(self, error: Any) -> dict:
+        """Normalize a stream error (dict, exception or other) into an error dict."""
         if isinstance(error, dict):
             return error
         if isinstance(error, Exception):

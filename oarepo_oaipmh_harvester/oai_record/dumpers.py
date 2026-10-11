@@ -11,11 +11,11 @@ from invenio_records.dumpers.search import SearchDumperExt
 
 
 class AddHarvesterDumperExt(SearchDumperExt):
-    """Base class for OAI record dumpers."""
+    """Dumper extension adding the harvester's name and managers to the search document."""
 
     @override
     def dump(self, record: Any, data: dict[str, Any]) -> None:
-        """Dump the data."""
+        """Add the harvester name and managers to the dumped data."""
         harvester = record.harvester
         data["harvester_name"] = harvester.name
         data["harvest_managers"] = harvester.harvest_managers or []

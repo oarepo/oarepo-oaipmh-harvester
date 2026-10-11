@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
 
 class HarvestManager(Generator):
-    """Enables access to logs for harvest managers."""
+    """Grants harvest managers access to the harvesters they manage."""
 
     @override
     def needs(self, **kwargs: Any) -> Collection[Need]:
@@ -50,7 +50,7 @@ class HarvestManager(Generator):
 
     @override
     def query_filter(self, **kwargs: Any) -> dsl.query.Query | list[dsl.query.Query] | None:
-        """Search filters."""
+        """Restrict search to harvesters managed by the identity."""
         identity = kwargs["identity"]
         if not identity or not identity.id:
             return MatchNone()
@@ -109,7 +109,7 @@ class HarvestRecordManager(Generator):
         return [UserNeed(manager["user"]) for manager in (harvester.harvest_managers or []) if "user" in manager]
 
     def query_filter(self, **kwargs: Any) -> dsl.query.Query | list[dsl.query.Query] | None:
-        """Return search filter for harvest record managers."""
+        """Restrict search to records of harvesters managed by the identity."""
         identity = kwargs["identity"]
         if not identity or not identity.id:
             return MatchNone()
@@ -117,7 +117,7 @@ class HarvestRecordManager(Generator):
 
 
 class OAIRecordPermissionPolicy(RecordPermissionPolicy):
-    """Permission policy for users and user groups."""
+    """Permission policy for harvested records."""
 
     can_create = (SystemProcess(),)
     can_read = (

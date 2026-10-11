@@ -55,7 +55,7 @@ class HarvesterDumper(SearchDumper):
 # note: should we use aggregate here? Alternative is to create a custom class
 # that would do better handling of the underlying model
 class OAIHarvesterAggregate(BaseAggregate):
-    """An aggregate of information about a user."""
+    """An aggregate of information about an OAI-PMH harvester."""
 
     model: OAIHarvesterAggregateModel  # ty: ignore[invalid-attribute-override] monkeytype
 
@@ -71,7 +71,7 @@ class OAIHarvesterAggregate(BaseAggregate):
     """The search engine index to use."""
 
     id = ModelField("id", dump_type=str)
-    """The code of the harvester."""
+    """The ID of the harvester."""
 
     base_url = ModelField("base_url", dump_type=str)
     """The base URL of the OAI-PMH service."""
@@ -116,7 +116,7 @@ class OAIHarvesterAggregate(BaseAggregate):
 
     @override
     def delete(self, force: bool = False) -> OAIHarvesterAggregate:
-        """Delete a record."""
+        """Delete the harvester."""
         if self.model is None:
             raise MissingModelError
 

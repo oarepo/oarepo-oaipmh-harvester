@@ -97,7 +97,7 @@ class AdministrationDetailJSONSerializer(JSONSerializer):
 # Resource config
 #
 class OAIRecordResourceConfig(RecordResourceConfig):
-    """OAI Runs resource configuration."""
+    """Harvest record resource configuration."""
 
     blueprint_name = "oai_records"
     url_prefix = "/oai/harvest/records"
@@ -138,7 +138,7 @@ class OAIRecordResource(RecordResource):
         return f"{prefix}{route}"
 
     def create_url_rules(self) -> list:
-        """Create the URL rules for the users resource."""
+        """Create the URL rules for the harvest record resource."""
         routes = self.config.routes
         return [
             route("GET", routes["list"], self.search),
@@ -151,7 +151,7 @@ class OAIRecordResource(RecordResource):
     @request_view_args
     @response_handler(many=True)
     def search(self) -> tuple[dict[str, Any], int]:
-        """Perform a search over users."""
+        """Search harvest records."""
         hits = self.service.search(
             identity=g.identity,
             params=resource_requestctx.args,
@@ -163,7 +163,7 @@ class OAIRecordResource(RecordResource):
     @request_view_args
     @response_handler()
     def read(self) -> tuple[dict[str, Any], int]:
-        """Read a user."""
+        """Read a single harvest record."""
         item = self.service.read(
             id_=resource_requestctx.view_args["id"],
             identity=g.identity,
