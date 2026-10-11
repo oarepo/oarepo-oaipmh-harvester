@@ -6,7 +6,17 @@
 # oarepo-oaipmh-harvester is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
 #
-"""OAI Import Transformer for OAI-PMH harvested records."""
+"""``oai-import`` transformer - converts harvested XML with the target model's import.
+
+The transformer takes the single child of the OAI ``<metadata>`` element and looks up an
+import of the target model whose ``oai_name`` equals ``(namespace, local name)`` of that
+element (imports are added to models with ``oarepo_model`` ``AddMetadataImport``). The
+import's deserializer gets the element itself (``deserialize_xml``) if it supports it,
+otherwise its string serialization (``deserialize``). Deleted OAI records pass through
+with ``record = None``.
+
+Datastream configuration: ``oai-import{model:"<model name>"}``.
+"""
 
 from __future__ import annotations
 

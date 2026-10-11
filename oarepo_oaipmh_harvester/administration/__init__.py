@@ -6,6 +6,12 @@
 # oarepo-oaipmh-harvester is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
 #
-"""Administration module for OAI-PMH Harvester."""
+"""invenio-administration views for harvesters and harvest records.
+
+The views are registered via the ``invenio_administration.views`` entry point. Access is
+granted to administrators and to harvest managers of any harvester (see
+``oai_harvester_permissions_decorator``); what each user sees is then limited by the
+service permission policies.
+"""
 
 from __future__ import annotations

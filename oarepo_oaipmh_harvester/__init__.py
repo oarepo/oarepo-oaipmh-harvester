@@ -6,7 +6,43 @@
 # oarepo-oaipmh-harvester is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
 #
-"""OAI-PMH Harvester for InvenioRDM."""
+"""OAI-PMH harvester for OARepo / Invenio RDM repositories.
+
+User documentation (defining harvesters, running and scheduling harvests, writer
+options) is in the project README. This package documentation describes the internals.
+
+Architecture
+------------
+
+* :mod:`oarepo_oaipmh_harvester.oai_harvester` - registry of harvesters (database model,
+  service, REST resource ``/api/oai/harvest/harvesters``). A harvester stores the OAI-PMH
+  endpoint and the datastream definition (loader, transformers, writers).
+* :mod:`oarepo_oaipmh_harvester.tasks` - builds an invenio-vocabularies datastream
+  (reader - transformers - writers) from a harvester and runs it as a Celery task.
+* :mod:`oarepo_oaipmh_harvester.transformers` - ``oai-import`` transformer converting
+  the harvested XML with an import registered on the target model.
+* :mod:`oarepo_oaipmh_harvester.writers` - ``oai-service`` writer synchronizing the
+  local record with the harvested one ("the harvest always wins") and tracking the result.
+* :mod:`oarepo_oaipmh_harvester.oai_record` - harvest records: one row per harvested OAI
+  identifier with original / transformed data, local pid and errors (service, REST
+  resource ``/api/oai/harvest/records``, search index).
+* :mod:`oarepo_oaipmh_harvester.jobs` - per-harvester invenio-jobs job types.
+* :mod:`oarepo_oaipmh_harvester.administration` - invenio-administration views.
+* :mod:`oarepo_oaipmh_harvester.permissions` - permission policies and generators.
+* :mod:`oarepo_oaipmh_harvester.cli` - ``invenio oai`` commands,
+  :mod:`oarepo_oaipmh_harvester.fixtures` - ``oai_harvesters.yaml`` fixture.
+
+Registration
+------------
+
+The Flask extension :class:`oarepo_oaipmh_harvester.ext.OARepoOAIHarvesterExt` is
+registered via ``invenio_base.apps`` / ``invenio_base.api_apps``; its services, indexers
+and harvester jobs are registered in :func:`oarepo_oaipmh_harvester.ext.finalize_apps`
+(``invenio_base.finalize_app`` / ``api_finalize_app``). Other entry points
+(``pyproject.toml``): database models and alembic migrations, search mappings, API
+blueprints, administration views, Celery tasks, the ``run_all_harvesters`` job, the ``oai`` CLI
+group and the ``oai_harvesters`` fixture.
+"""
 
 from __future__ import annotations
 

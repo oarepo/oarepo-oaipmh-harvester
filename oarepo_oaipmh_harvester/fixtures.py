@@ -4,7 +4,19 @@
 # oarepo-oaipmh-harvester is free software; you can redistribute it and/or modify
 # it under the terms of the MIT License; see LICENSE file for more details.
 
-"""Users fixtures module."""
+"""``oai_harvesters`` fixture - harvesters loaded from ``app_data/oai_harvesters.yaml``.
+
+Registered via the ``oarepo.fixtures`` entry point. Each YAML entry uses the keys of the
+``invenio oai harvesters create`` command (``id``, ``name``, ``base-url``,
+``metadata-prefix``, ``setspec``, ``loader``, ``model``, ``transformer``, ``writer``,
+``harvest-manager``, ``comment``). Existing harvesters are updated.
+
+When ``model`` is given and ``transformer`` / ``writer`` are not, the defaults are
+``oai-import{model:...}`` and ``oai-service{model:...}``, as in the command line.
+
+``harvest-manager`` entries are e-mail addresses of existing users (or ``{"user": id}``
+dictionaries); they are stored as user ids.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +27,7 @@ from invenio_access.permissions import system_identity
 from invenio_db import db
 from invenio_rdm_records.fixtures.fixture import FixtureMixin
 
+from oarepo_oaipmh_harvester.cli import lookup_user
 from oarepo_oaipmh_harvester.proxies import current_oai_harvester_service
 
 
@@ -31,7 +44,7 @@ class HarvestersFixture(FixtureMixin):
             if not transformers:
                 transformers = [f'oai-import{{model:"{model}"}}']
             if not writers:
-                writers = [f'collision-aware{{model:"{model}"}}']
+                writers = [f'oai-service{{model:"{model}"}}']
 
         harvester_data = {
             "id": entry.pop("id"),
@@ -45,7 +58,10 @@ class HarvestersFixture(FixtureMixin):
             "comment": entry.pop("comment", ""),
         }
 
-        harvest_managers = list(entry.pop("harvest-manager", []))
+        harvest_managers = [
+            {"user": lookup_user(manager)} if isinstance(manager, str) else manager
+            for manager in entry.pop("harvest-manager", [])
+        ]
         if harvest_managers:
             harvester_data["harvest_managers"] = harvest_managers
 

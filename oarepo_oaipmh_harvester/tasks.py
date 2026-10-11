@@ -6,7 +6,25 @@
 # oarepo-oaipmh-harvester is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
 #
-"""Tasks for OAI-PMH Harvester."""
+"""Harvest Celery tasks and datastream construction.
+
+:func:`harvest_oaipmh_records` loads a harvester and builds an invenio-vocabularies
+datastream from it:
+
+* reader - the harvester's ``loader`` (default ``oai-pmh``, the invenio-vocabularies
+  OAI-PMH reader), with ``base_url``, ``metadata_prefix``, ``set``, ``from_date``
+  (from ``since``, formatted to the granularity the server advertises in ``Identify``,
+  see :func:`format_oaipmh_datestamp`) and ``identifiers`` filled in unless given in the
+  loader options;
+* transformers and writers - the harvester's ``transformers`` / ``writers``.
+
+Each definition is a string ``name{options}`` where options are a JSON5 object
+(:func:`parse_config`); ``harvester_id`` is always added to the options. The names are
+looked up in ``VOCABULARIES_DATASTREAM_READERS`` / ``_TRANSFORMERS`` / ``_WRITERS``.
+
+:func:`run_all_harvesters` (job type :class:`RunAllHarvesters`) runs a full harvest of
+all harvesters.
+"""
 
 from __future__ import annotations
 

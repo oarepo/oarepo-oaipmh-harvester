@@ -6,7 +6,37 @@
 # oarepo-oaipmh-harvester is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
 #
-"""Writer for OAI-PMH harvested records using a service."""
+"""``oai-service`` writer - synchronizes local records with harvested ones.
+
+Datastream configuration: ``oai-service{model:"<model>", ...}``, see
+:class:`OAIServiceWriter` for the options.
+
+For each harvested entry the writer
+
+1. loads the harvest record (:class:`~oarepo_oaipmh_harvester.oai_record.models.OAIHarvestedRecord`)
+   of the OAI identifier; the local pid is taken from it, or - for a record harvested for
+   the first time - from the transformed data via the pid provider's
+   ``get_pid_value_from_record`` (records deposited locally with the same pid are taken
+   over);
+2. classifies the local record - :meth:`LocalRecord.resolve` returns a
+   :class:`LocalState` (absent, live, draft only, tombstoned, hard deleted) together with
+   the record and a local draft, if any;
+3. picks the :class:`Operation` that brings the local record to the harvested state -
+   :meth:`LocalRecord.operation`. The harvest always wins: locally deleted records are
+   restored (rdm tombstones, ``restore_record``) or revived (hard deleted records are
+   reverted to their last revision, keeping the pid), locally restored records are
+   deleted again, local edit drafts are overwritten or removed;
+4. skips the entry if the OAI datestamp and deleted flag are unchanged, the last write
+   had no errors and the local record is already in the harvested state;
+5. executes the operation inside a unit of work (multi-step operations such as restore
+   + update roll back together) and publishes drafts where needed;
+6. stores the harvest record with the datestamp, transformed data, local pid and errors.
+
+Draft services do not allow updating published records, so updates go through edit -
+update draft - publish unless ``direct_update`` is set. Records of rdm services are
+deleted with ``delete_record`` (tombstone with a note about the deletion at the source),
+other services with ``delete``.
+"""
 
 from __future__ import annotations
 
@@ -210,7 +240,13 @@ class OAIServiceWriter(BaseWriter):
     ):
         """Initialize the OAI service writer.
 
-        :param publish: publish created / updated drafts (required for draft services)
+        :param model: name of the target model (``current_runtime.models``)
+        :param identity: identity used for the service calls, defaults to the system identity
+        :param update_all: write every record, even if it is up to date
+        :param harvester_id: harvester the harvest records belong to (set by the harvest task)
+        :param pid_field: path of the pid value in the service result
+        :param publish: publish created / updated drafts. Required (``ValueError``
+            otherwise) for rdm models; ``False`` only for models without drafts.
         :param direct_update: update published records via ``service.update`` instead of
             edit - update draft - publish. Only for services that allow updating published
             records (drafts services do not by default).

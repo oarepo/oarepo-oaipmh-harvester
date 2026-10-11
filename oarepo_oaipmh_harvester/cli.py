@@ -166,7 +166,7 @@ def create_harvester(  # noqa: PLR0917,PLR0913  # many parameters
         if not transformers:
             transformers = [f'oai-import{{model:"{model}"}}']
         if not writers:
-            writers = [f'oai-service{{model:"{model}",update:true}}']
+            writers = [f'oai-service{{model:"{model}"}}']
 
     harvester_data = {
         "id": id,
@@ -250,7 +250,7 @@ def update_harvester(  # noqa: PLR0913,PLR0917  # many parameters
             if not transformers:
                 transformers = [f'oai-import{{model:"{model}"}}']
             if not writers:
-                writers = [f'oai-service{{model:"{model}",update:true}}']
+                writers = [f'oai-service{{model:"{model}"}}']
 
         if name is not None:
             update_data["name"] = name

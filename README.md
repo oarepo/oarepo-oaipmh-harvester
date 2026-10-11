@@ -1,191 +1,202 @@
 # OARepo OAI-PMH Harvester
 
-End-to-end OAI-PMH harvesting utilities for Invenio-based repositories: manage harvesters, launch Celery-powered imports, persist harvested records, and expose REST and administration views.
+Harvest records from remote OAI-PMH repositories into your OARepo / Invenio RDM
+repository and keep them in sync.
 
-## Overview
-
-This package extends Invenio with:
-
-- CRUD and REST APIs for registering OAI-PMH harvesters, including facets and administration panels
-- A configurable DataStream pipeline (readers → transformers → writers) for harvesting
-  and importing remote records into local services
-- Persistent tracking of harvested records, captured errors, and original XML payloads
-- Celery tasks and Invenio Jobs integration for scheduled or ad-hoc harvesting runs
-- Permission policies for repository administrators and delegated harvest managers
+- Register harvesters (OAI-PMH endpoint + target model) from the command line, a
+  fixture file or the administration UI.
+- Run harvests on demand or on a schedule (invenio-jobs); scheduled runs are
+  incremental.
+- Every harvested record is tracked: its original XML, the transformed data, the
+  local record it was written to, and any errors - browsable in the administration UI.
+- **The harvest always wins.** Whatever happened to a harvested record locally (edited,
+  deleted, restored), the next harvest brings it back to the state reported by the
+  source.
 
 ## Installation
 
 ```bash
-pip install oarepo-oaipmh-harvester
+pip install oarepo-oai-pmh-harvester
+invenio alembic upgrade        # creates / migrates the harvester tables
+invenio index init             # or create the oai-harvester and oai-harvest-record indices
 ```
 
-Optional extras:
+Requirements:
 
-- `pip install oarepo-oaipmh-harvester[oarepo14]` for an Invenio RDM 14 test environment
-- `pip install oarepo-oaipmh-harvester[tests]` to obtain pytest helpers used in the test-suite
+- Python 3.14, OARepo 14 (Invenio RDM 14)
+- a Celery worker - harvests run as Celery tasks
+- the target model must be an OARepo model (`oarepo-model`) with an OAI import (see below)
 
-### Requirements
+## Preparing your model
 
-- Python 3.13 or 3.14
-- Invenio 14.x with a compatible OpenSearch/Elasticsearch backend
-- `invenio-oaipmh-scythe` for OAI-PMH client functionality
-- `invenio-jobs` for scheduled harvesting
-- A running Celery worker when executing background harvest tasks
-
-## Key Features
-
-### 1. Harvester Registry & REST Services
-
-**Source:** [`oarepo_oaipmh_harvester/oai_harvester/service.py`](oarepo_oaipmh_harvester/oai_harvester/service.py), [`oarepo_oaipmh_harvester/oai_harvester/api.py`](oarepo_oaipmh_harvester/oai_harvester/api.py), [`oarepo_oaipmh_harvester/oai_harvester/views.py`](oarepo_oaipmh_harvester/oai_harvester/views.py)
-
-- `OAIHarvesterService` provides CRUD, search, and `harvest` actions with pagination, suggestion, and rich facet definitions (`facets.py`).
-- Aggregated records expose model-backed properties (`OAIHarvesterAggregate`) while `HarvesterDumper` stores metadata to OpenSearch.
-- REST blueprints are registered automatically, and tests in [`tests/test_harvester_crud.py`](tests/test_harvester_crud.py) validate end-to-end creation, indexing, updates, and deletion.
+The harvester converts the harvested XML with an *import* registered on the target
+model. The import's `oai_name` (namespace, root element name) selects it for the
+metadata format being harvested:
 
 ```python
-from invenio_access.permissions import system_identity
-from oarepo_oaipmh_harvester.proxies import current_oai_harvester_service
+from oarepo_model.customizations import AddMetadataImport
 
-current_oai_harvester_service.create(
-    system_identity,
-    {
-        "id": "zenodo",
-        "name": "Zenodo OAI",
-        "base_url": "https://zenodo.org/oai2d",
-        "metadata_prefix": "oai_dc",
-        "loader": "oai-pmh",
-        "transformers": ['oai-import{model:"rdmrecord"}'],
-        "writers": ['oai-service{model:"rdmrecord",update:true}'],
-    },
+AddMetadataImport(
+    code="datacite-xml",
+    name="DataCite XML",
+    mimetype="application/vnd.datacite.datacite+xml",
+    deserializer=DataCiteXMLDeserializer(),
+    oai_name=("http://datacite.org/schema/kernel-4", "resource"),
 )
 ```
 
-### 2. Configurable Harvest Pipeline
+The deserializer gets the metadata XML element (`deserialize_xml`, if it has that
+method) or its string form (`deserialize`) and returns the record data as accepted by
+the model's service.
 
-**Source:** [`oarepo_oaipmh_harvester/tasks.py`](oarepo_oaipmh_harvester/tasks.py), [`oarepo_oaipmh_harvester/transformers/oai_import.py`](oarepo_oaipmh_harvester/transformers/oai_import.py), [`oarepo_oaipmh_harvester/writers/oai_service.py`](oarepo_oaipmh_harvester/writers/oai_service.py), [`oarepo_oaipmh_harvester/config.py`](oarepo_oaipmh_harvester/config.py)
+If the record's persistent identifier comes from the harvested data (the pid provider
+has a `get_pid_value_from_record` class method), a record a user deposited earlier with
+the same identifier is taken over and overwritten by the harvest - no duplicate is
+created.
 
-- `harvest_oaipmh_records` builds a DataStream pipeline from string-based loader/transformer/writer definitions using JSON5 arguments.
-- `OAIImportTransformer` resolves the proper model import based on the harvested XML namespace and local name.
-- `OAIServiceWriter` writes into the target OARepo model service, deduplicates on datestamp, handles deletions, and stores status information.
-- `VOCABULARIES_DATASTREAM_TRANSFORMERS` and `_WRITERS` register these components globally at extension init time.
-- Sample pipeline execution is exercised in [`tests/test_harvest_task.py`](tests/test_harvest_task.py), which mocks remote responses and asserts that harvested records land both in the target model and the tracking index.
+## Defining harvesters
 
-### 3. Harvested Record Tracking & Search
+A harvester has:
 
-**Source:** [`oarepo_oaipmh_harvester/oai_record/api.py`](oarepo_oaipmh_harvester/oai_record/api.py), [`oarepo_oaipmh_harvester/oai_record/models.py`](oarepo_oaipmh_harvester/oai_record/models.py), [`oarepo_oaipmh_harvester/oai_record/service.py`](oarepo_oaipmh_harvester/oai_record/service.py), [`oarepo_oaipmh_harvester/oai_record/dumpers.py`](oarepo_oaipmh_harvester/oai_record/dumpers.py)
+| Field | Meaning |
+|---|---|
+| `id` | short identifier, used on the command line and in job names |
+| `name`, `comment` | human readable description |
+| `base_url` | OAI-PMH endpoint |
+| `metadata_prefix` | metadata format to harvest, e.g. `oai_dc`, `oai_datacite` |
+| `setspec` | optional OAI-PMH set |
+| `loader` | reader of the source, default `oai-pmh` |
+| `transformers` | list of transformers, usually `oai-import{model:"<model>"}` |
+| `writers` | list of writers, usually `oai-service{model:"<model>"}` |
+| `harvest_managers` | users who may see this harvester's records and start it |
 
-- `OAIHarvestedRecord` persists original XML, transformed payloads, error lists, and links back to the originating harvester.
-- The service exposes facets over error codes, deletion flags, and harvester assignments, with `AddHarvesterDumperExt` injecting harvester context into search documents.
-- Relationship fields (`harvester_id`, `harvester`) provide ORM-level joins, fixed in the SQLAlchemy model by declaring the foreign-key column explicitly.
-- Permission policies (`OAIRecordPermissionPolicy`) allow administrators and harvest managers to inspect logs while keeping data restricted.
+Loader, transformers and writers are written as `name{options}`, where the options are
+a JSON5 object (unquoted keys allowed). Custom readers, transformers and writers can be
+registered in `VOCABULARIES_DATASTREAM_READERS` / `_TRANSFORMERS` / `_WRITERS`.
 
-### 4. Celery Tasks & Invenio Jobs Integration
+### From the command line
 
-**Source:** [`oarepo_oaipmh_harvester/tasks.py`](oarepo_oaipmh_harvester/tasks.py), [`oarepo_oaipmh_harvester/jobs.py`](oarepo_oaipmh_harvester/jobs.py)
+```bash
+invenio oai harvesters create \
+    --id zenodo --name "Zenodo" \
+    --base-url https://zenodo.org/oai2d --metadata-prefix oai_datacite \
+    --model datasets \
+    --harvest-manager manager@example.org
 
-- Harvest executions run through a Celery task (`harvest_oaipmh_records`) and stream results synchronously or asynchronously.
-- `register_oaipmh_job` creates dynamic `JobType` subclasses per harvester, enabling individual scheduling through `invenio-jobs`.
-- `finalize_apps` re-registers jobs on startup so scheduled runs survive restarts.
+invenio oai harvesters list            # --json for machine readable output
+invenio oai harvesters update zenodo --setspec user-cesnet
+invenio oai harvesters delete zenodo
+```
 
-### 5. Administration & Proxies
+`--model` fills in the default transformer and writer for the model; use
+`--transformer` / `--writer` (repeatable) to set them explicitly.
 
-**Source:** [`oarepo_oaipmh_harvester/proxies.py`](oarepo_oaipmh_harvester/proxies.py), [`oarepo_oaipmh_harvester/administration/harvester/views.py`](oarepo_oaipmh_harvester/administration/harvester/views.py), [`oarepo_oaipmh_harvester/administration/record/views.py`](oarepo_oaipmh_harvester/administration/record/views.py)
+### From a fixture
 
-- Flask proxies expose `current_oai_harvester_service` and `current_oai_record_service` for reuse in CLI tasks, tests, and application extensions.
-- Administration entry points register list, detail, create, and edit screens for both harvesters and harvested records inside `invenio-administration`.
+Put `oai_harvesters.yaml` into the instance's `app_data` folder; harvesters are created
+(or updated, if they exist) when fixtures are loaded:
 
-### 6. Permissions & Access Control
+```yaml
+- id: zenodo
+  name: Zenodo
+  base-url: https://zenodo.org/oai2d
+  metadata-prefix: oai_datacite
+  setspec: user-cesnet
+  model: datasets
+  harvest-manager:
+    - manager@example.org
+```
 
-**Source:** [`oarepo_oaipmh_harvester/permissions.py`](oarepo_oaipmh_harvester/permissions.py)
+`transformer` and `writer` default to `oai-import{model:...}` and `oai-service{model:...}`
+when `model` is given. Harvest managers are e-mail addresses of existing users.
 
-- Custom generators (`AdministrationWithQueryFilter`, `HarvestManager`, `HarvestRecordManager`) combine action-based permissions with per-harvester manager lists.
-- `harvest_action` can be granted to roles or users to allow API-triggered harvest runs without full administration rights.
-- Search filters ensure that users only see harvesters and records they manage.
+### From the administration UI
 
-### 7. REST Mappings & Search Configuration
+*Administration → OAI-PMH Harvesters* lists, creates and edits harvesters.
 
-**Source:** [`oarepo_oaipmh_harvester/oai_harvester/mappings`](oarepo_oaipmh_harvester/oai_harvester/mappings), [`oarepo_oaipmh_harvester/oai_record/mappings`](oarepo_oaipmh_harvester/oai_record/mappings)
+## Running harvests
 
-- OpenSearch mappings are shipped with the package and loaded through entry points, ensuring consistent indexing for harvester registries and harvested records.
-- `OAIRecordSearchOptions` and `OAIHarvesterSearchOptions` configure suggestion parsers, pagination defaults, and facet sets tailored to OAI workflows.
+```bash
+invenio oai harvest zenodo                              # full harvest, in this process
+invenio oai harvest zenodo --since 2025-01-01           # records changed since a date
+invenio oai harvest zenodo oai:zenodo.org:123 oai:...   # selected records only
+invenio oai harvest zenodo --use-job                    # run it as an invenio-jobs job (Celery)
+```
+
+Scheduled harvesting uses [invenio-jobs](https://github.com/inveniosoftware/invenio-jobs):
+
+- each harvester has its own job type, `harvest_oaipmh_records_<harvester id>` - create
+  a job for it in *Administration → Jobs* and set its schedule. Scheduled runs only
+  harvest records changed since the last successful run.
+- the job type `run_all_harvesters` runs a full harvest of all harvesters.
+
+A harvest can also be started from the REST API
+(`POST /api/oai/harvest/harvesters/<id>/start`), and a single record re-harvested with
+`POST /api/oai/harvest/records/<oai identifier>/harvest`.
+
+## The `oai-service` writer
+
+Writes the harvested records through the target model's service. Options:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `model` | - | target model name (required) |
+| `publish` | `true` | publish created / updated drafts. Required for draft-enabled (RDM) models; set `false` only for models without drafts. |
+| `direct_update` | `false` | update published records with `service.update` instead of edit - update draft - publish. Only for models whose service allows updating published records. |
+| `update_all` | `false` | rewrite every record, even if unchanged since the last harvest |
+| `pid_field` | `"id"` | where the record's pid value is in the service result |
+
+### How records are kept in sync
+
+A record is skipped when its OAI datestamp is unchanged, the last write had no errors
+and the local record is still in the harvested state. Otherwise:
+
+| Source says | Local record | Result |
+|---|---|---|
+| live | missing | created (and published) |
+| live | live | updated - a local edit draft is overwritten |
+| live | draft only | draft updated and published |
+| live | deleted locally (tombstone, also marked for purge) | restored, then updated |
+| live | hard deleted | revived from its last revision with the same identifier, then updated |
+| deleted | live | deleted - RDM records get a tombstone noting the deletion at the source; a local edit draft is removed |
+| deleted | draft only | draft deleted |
+| deleted | already deleted | nothing (a left-over local edit draft is removed) |
+
+## Monitoring
+
+Every harvested record is stored as a *harvest record* (keyed by its OAI identifier)
+with the OAI datestamp, the deleted flag, the original XML, the transformed data, the
+local record identifier and the errors of the last write. Browse them in
+*Administration → OAI-PMH Harvester Records* - filter by harvester, deleted flag, error
+type, message or location - or via `GET /api/oai/harvest/records`.
+
+## Permissions
+
+- repository administrators can manage all harvesters and see all harvest records;
+- harvest managers of a harvester (user ids in `harvest_managers`) can open the
+  harvester administration, see the harvester and its harvest records and start it, but
+  can not change it.
+
+## Configuration
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `OAI_HARVESTER_DEFAULT_BATCH_SIZE` | `1` | records per datastream batch |
+| `OAI_HARVESTER_SEARCH`, `OAI_HARVESTER_FACETS`, `OAI_HARVESTER_SORT_OPTIONS` | | search of harvesters |
+| `OAI_RECORD_SEARCH`, `OAI_RECORD_FACETS`, `OAI_RECORD_SORT_OPTIONS` | | search of harvest records |
 
 ## Development
 
-### Setup
-
 ```bash
-git clone https://github.com/oarepo/oarepo-oaipmh-harvester.git
-cd oarepo-oaipmh-harvester
-
-./run.sh venv
+./run.sh venv     # create the development environment
+./run.sh test     # run the tests (starts the docker services)
+./run.sh lint     # format and lint
 ```
 
-The helper script downloads the shared OARepo runner, prepares a virtual environment, and installs development requirements.
-
-### Running Tests
-
-```bash
-./run.sh test
-# or directly
-pytest
-```
-
-Key tests:
-
-- [`tests/test_harvester_crud.py`](tests/test_harvester_crud.py) – validates CRUD, search, and indexing operations for harvesters.
-- [`tests/test_harvest_task.py`](tests/test_harvest_task.py) – mocks an entire harvest pipeline, processes Celery queue outputs, and asserts on stored records and tracking entries.
-
-## Entry Points
-
-```ini
-[project.entry-points]
-"invenio_base.apps" =
-	oarepo_oaipmh = oarepo_oaipmh_harvester.ext:OARepoOAIHarvesterExt
-"invenio_base.api_apps" =
-	oarepo_oaipmh = oarepo_oaipmh_harvester.ext:OARepoOAIHarvesterExt
-"invenio_base.api_blueprints" =
-	oarepo-oaipmh-harvester = oarepo_oaipmh_harvester.oai_harvester.views:create_api_blueprint
-	oarepo-oaipmh-harvester_record = oarepo_oaipmh_harvester.oai_record.views:create_api_blueprint
-"invenio_base.finalize_app" =
-	oarepo_oaipmh_harvester = oarepo_oaipmh_harvester.ext:finalize_apps
-"invenio_base.api_finalize_app" =
-	oarepo_oaipmh_harvester = oarepo_oaipmh_harvester.ext:finalize_apps
-"invenio_celery.tasks" =
-	oarepo_harvest = oarepo_oaipmh_harvester.tasks
-"invenio_jobs.jobs" =
-	harvest_oaipmh_records = oarepo_oaipmh_harvester.jobs:OAIHarvestJob
-"invenio_db.models" =
-	oarepo-oaipmh-harvester = oarepo_oaipmh_harvester.oai_harvester.models
-	oarepo-oaipmh-harvester-record = oarepo_oaipmh_harvester.oai_record.models
-"invenio_db.alembic" =
-	oarepo_oaipmh_harvester = oarepo_oaipmh_harvester:alembic
-"invenio_administration.views" =
-	oarepo_oai_harvester_list = oarepo_oaipmh_harvester.administration.harvester.views:OAIPMHListView
-	oarepo_oaipmh_create = oarepo_oaipmh_harvester.administration.harvester.views:OAIPMHCreateView
-	oarepo_oaipmh_harvester_edit = oarepo_oaipmh_harvester.administration.harvester.views:OAIPMHEditView
-	oarepo_oaipmh_harvester_details = oarepo_oaipmh_harvester.administration.harvester.views:OAIPMHDetailView
-	oarepo_oaipmh_record_list = oarepo_oaipmh_harvester.administration.record.views:RecordListView
-	oarepo_oaipmh_record_details = oarepo_oaipmh_harvester.administration.record.views:RecordDetailView
-"invenio_access.actions" =
-	harvest_action = oarepo_oaipmh_harvester.permissions:harvest_action
-"invenio_search.mappings" =
-	oai-harvester = oarepo_oaipmh_harvester.oai_harvester.mappings
-	oai-harvest-record = oarepo_oaipmh_harvester.oai_record.mappings
-```
+The API documentation is generated from the module docstrings; start with the
+`oarepo_oaipmh_harvester` package docstring.
 
 ## License
 
-Copyright (c) 2025 CESNET z.s.p.o.
-
-Released under the MIT License. See [LICENSE](LICENSE) for details.
-
-## Links
-
-- Documentation & Source: <https://github.com/oarepo/oarepo-oaipmh-harvester>
-- Issues: <https://github.com/oarepo/oarepo-oaipmh-harvester/issues>
-- OARepo Project: <https://github.com/oarepo>
-
-## Acknowledgments
-
-This project builds upon the [Invenio](https://inveniosoftware.org/) framework and is developed as part of the OARepo ecosystem for FAIR-ready repositories.
-
+Copyright (c) 2025-2026 CESNET z.s.p.o. Released under the MIT License, see
+[LICENSE](LICENSE).
