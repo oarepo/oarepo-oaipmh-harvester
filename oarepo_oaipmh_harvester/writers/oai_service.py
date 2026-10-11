@@ -22,6 +22,8 @@ from invenio_access.permissions import system_identity
 from invenio_db import db
 from invenio_db.uow import UnitOfWork
 from invenio_pidstore.errors import PersistentIdentifierError, PIDDeletedError
+from invenio_pidstore.models import PersistentIdentifier, PIDStatus
+from invenio_rdm_records.records.systemfields.deletion_status import RecordDeletionStatusEnum
 from invenio_records.dictutils import dict_lookup
 from invenio_vocabularies.datastreams.writers import BaseWriter
 from oarepo_runtime import current_runtime
@@ -39,6 +41,7 @@ if TYPE_CHECKING:
     from invenio_drafts_resources.services.records import (
         RecordService as DraftRecordService,
     )
+    from invenio_rdm_records.services.services import RDMRecordService
     from invenio_records_resources.records.api import Record
     from invenio_records_resources.services.records import RecordService
     from invenio_vocabularies.datastreams.datastreams import StreamEntry
@@ -67,6 +70,25 @@ class LocalState(StrEnum):
     """Record deleted via ``service.delete`` - ``model.is_deleted`` set, pid status ``D``."""
 
 
+class Operation(StrEnum):
+    """Operation that brings the local record to the state reported by the OAI-PMH source."""
+
+    NOOP = "noop"
+    CREATE = "create"
+    UPDATE = "update"
+    """Update a live record (for draft services: edit, update draft, publish)."""
+    UPDATE_DRAFT = "update_draft"
+    RESTORE = "restore"
+    """Restore a tombstoned rdm record (unmarking it from purge if needed), then update it."""
+    REVIVE = "revive"
+    """Revert a hard deleted record to its last revision, re-register its pid, then update it."""
+    DELETE = "delete"
+    """Delete via ``service.delete`` - for services without rdm deletion workflow."""
+    DELETE_RECORD = "delete_record"
+    """Tombstone via rdm ``delete_record``."""
+    DELETE_DRAFT = "delete_draft"
+
+
 @dataclass(frozen=True)
 class LocalRecord:
     """Local record state together with the resolved record and draft (if any)."""
@@ -77,6 +99,8 @@ class LocalRecord:
     """Service supports rdm deletion workflow (tombstones via ``delete_record``)."""
     record: Record | None = None
     draft: Record | None = None
+    deleted_pid: PersistentIdentifier | None = None
+    """Pid of a hard deleted record (status ``D``)."""
 
     @classmethod
     def resolve(cls, service: RecordService, pid_value: str | None, *, with_drafts: bool) -> LocalRecord:
@@ -87,6 +111,7 @@ class LocalRecord:
 
         record_cls = service.record_cls
         record = None
+        deleted_pid = None
         state = LocalState.ABSENT
         try:
             record = record_cls.pid.resolve(pid_value)
@@ -94,6 +119,7 @@ class LocalRecord:
             # hard (non-tombstone) delete: the resolver does not return the record,
             # so load it including deleted ones
             state = LocalState.HARD_DELETED
+            deleted_pid = e.pid
             if e.pid.object_uuid:
                 with contextlib.suppress(NoResultFound):
                     record = record_cls.get_record(e.pid.object_uuid, with_deleted=True)
@@ -115,24 +141,34 @@ class LocalRecord:
                 draft = draft_cls.pid.resolve(pid_value, registered_only=False)
         if draft is not None and state is not LocalState.TOMBSTONED:
             state = LocalState.DRAFT_ONLY
-        return cls(state, pid_value, is_rdm, record, draft)
+        return cls(state, pid_value, is_rdm, record, draft, deleted_pid)
 
-    def operation(self, oai_deleted: bool) -> str:
-        """Determine the operation that brings the local record to the harvested state."""
-        # TODO: tombstoned / hard deleted records are handled in step 3 of delete_steps.md;
-        # for now they keep the original behaviour (tombstone resolves as a record,
-        # hard deleted does not)
+    def operation(self, oai_deleted: bool) -> Operation:  # noqa: PLR0911 one return per state
+        """Determine the operation that brings the local record to the harvested state.
+
+        The harvest always wins - whatever happened to the record locally, the state
+        reported by the OAI-PMH source becomes the local state.
+        """
         if oai_deleted:
-            if self.state in (LocalState.LIVE, LocalState.TOMBSTONED):
-                return "delete"
-            if self.state is LocalState.DRAFT_ONLY:
-                return "delete_draft"
-            return "noop"
-        if self.state in (LocalState.LIVE, LocalState.TOMBSTONED):
-            return "update"
-        if self.state is LocalState.DRAFT_ONLY:
-            return "update_draft"
-        return "create"
+            match self.state:
+                case LocalState.LIVE:
+                    return Operation.DELETE_RECORD if self.is_rdm else Operation.DELETE
+                case LocalState.DRAFT_ONLY:
+                    return Operation.DELETE_DRAFT
+                case _:
+                    # already deleted locally (tombstoned / hard deleted) or never existed
+                    return Operation.NOOP
+        match self.state:
+            case LocalState.LIVE:
+                return Operation.UPDATE
+            case LocalState.DRAFT_ONLY:
+                return Operation.UPDATE_DRAFT
+            case LocalState.TOMBSTONED:
+                return Operation.RESTORE
+            case LocalState.HARD_DELETED if self.record is not None and self.deleted_pid is not None:
+                return Operation.REVIVE
+            case _:
+                return Operation.CREATE
 
 
 class OAIServiceWriter(BaseWriter):
@@ -165,6 +201,10 @@ class OAIServiceWriter(BaseWriter):
             *args,
             **kwargs,
         )
+
+        if not publish and hasattr(self.service, "delete_record"):
+            # rdm records can not be updated directly, only via edit - update draft - publish
+            raise ValueError(f"Model '{model}' uses rdm records service, the oai-service writer needs publish=True.")
 
     @property
     def service(self) -> RecordService:
@@ -260,7 +300,7 @@ class OAIServiceWriter(BaseWriter):
         self,
         transformed_data: dict,
         local: LocalRecord,
-        op_type: str,
+        op_type: Operation,
         stream_entry: StreamEntry,
         oai_identifier: str,
     ) -> dict | None:
@@ -283,7 +323,7 @@ class OAIServiceWriter(BaseWriter):
             # resolve lazy strings before writing
             transformed_data = json.loads(json.dumps(transformed_data, default=str))
             try:
-                written_data = self._write(transformed_data, local, op_type, uow)
+                written_data = self._write(transformed_data, local, op_type, oai_identifier, uow)
             except Exception:
                 current_app.logger.exception(
                     "Error during '%s' operation for OAI identifier %s",
@@ -309,7 +349,13 @@ class OAIServiceWriter(BaseWriter):
                         x for err in written_data["errors"] for x in self._convert_to_oai_error(err)
                     ]
                     commit_transaction = False
-                elif self._publish and op_type in ("create", "update_draft"):
+                elif self._publish and op_type in (
+                    Operation.CREATE,
+                    Operation.UPDATE,
+                    Operation.UPDATE_DRAFT,
+                    Operation.RESTORE,
+                    Operation.REVIVE,
+                ):
                     draft_service = cast("DraftRecordService", self.service)
                     draft_service.publish(
                         self._identity,
@@ -390,11 +436,13 @@ class OAIServiceWriter(BaseWriter):
         oai_record.datestamp = oai_datestamp
         oai_record.deleted = oai_deleted
         # store errors and warnings
-        oai_record.errors = [self._convert_stream_error(e) for e in (stream_entry.errors or [])]
+        # build the list before assigning - in-place append on a JSON column is not persisted
+        errors = [self._convert_stream_error(e) for e in (stream_entry.errors or [])]
         if exception_raised is not None:
-            oai_record.errors.append(self._convert_exception_to_error_dict(exception_raised))
+            errors.append(self._convert_exception_to_error_dict(exception_raised))
         if stream_entry.exc:
-            oai_record.errors.append(self._convert_exception_to_error_dict(stream_entry.exc))
+            errors.append(self._convert_exception_to_error_dict(stream_entry.exc))
+        oai_record.errors = errors
         oai_record.harvested_at = harvested_at
         oai_record.has_errors = bool(oai_record.errors)
         # no warnings tracking for now
@@ -416,38 +464,87 @@ class OAIServiceWriter(BaseWriter):
 
         current_oai_record_service.indexer.bulk_index([oai_record.oai_identifier])
 
-    def _write(self, record_data: dict, local: LocalRecord, op_type: str, uow: UnitOfWork) -> dict | None:
+    def _write(  # noqa: C901, PLR0911 one branch per operation
+        self,
+        record_data: dict,
+        local: LocalRecord,
+        op_type: Operation,
+        oai_identifier: str,
+        uow: UnitOfWork,
+    ) -> dict | None:
         """Write the record data using the service."""
-        pid_value = local.pid_value
-        if op_type == "noop":
+        if op_type is Operation.NOOP:
             return None
-        if op_type == "create":
+        if op_type is Operation.CREATE:
             return cast(
                 "dict",
                 self.service.create(self._identity, record_data, uow=uow).to_dict(),
             )
+        pid_value = local.pid_value
         if pid_value is None:
             raise ValueError(f"pid_value must be provided for {op_type} operation")
 
-        if op_type == "update_draft":
-            draft_service = cast("DraftRecordService", self.service)
-            return cast(
-                "dict",
-                draft_service.update_draft(self._identity, pid_value, record_data, uow=uow).to_dict(),
-            )
-        if op_type == "update":
-            return cast(
-                "dict",
-                self.service.update(self._identity, pid_value, record_data, uow=uow).to_dict(),
-            )
-        if op_type == "delete":
-            self.service.delete(self._identity, pid_value, uow=uow)
-            return None
-        if op_type == "delete_draft":
-            draft_service = cast("DraftRecordService", self.service)
-            draft_service.delete_draft(self._identity, pid_value, uow=uow)
-            return None
+        draft_service = cast("DraftRecordService", self.service)
+        rdm_service = cast("RDMRecordService", self.service)
+        match op_type:
+            case Operation.UPDATE_DRAFT:
+                return cast(
+                    "dict",
+                    draft_service.update_draft(self._identity, pid_value, record_data, uow=uow).to_dict(),
+                )
+            case Operation.UPDATE:
+                return self._update(record_data, pid_value, uow)
+            case Operation.RESTORE:
+                if local.record is not None and local.record.deletion_status == RecordDeletionStatusEnum.MARKED:
+                    rdm_service.unmark_record_for_purge(self._identity, pid_value, uow=uow)
+                rdm_service.restore_record(self._identity, pid_value, uow=uow)
+                return self._update(record_data, pid_value, uow)
+            case Operation.REVIVE:
+                self._revive(local)
+                return self._update(record_data, pid_value, uow)
+            case Operation.DELETE:
+                self.service.delete(self._identity, pid_value, uow=uow)
+                return None
+            case Operation.DELETE_RECORD:
+                rdm_service.delete_record(
+                    self._identity,
+                    pid_value,
+                    {"note": f"Deleted at the OAI-PMH source ({oai_identifier})", "is_visible": True},
+                    uow=uow,
+                )
+                return None
+            case Operation.DELETE_DRAFT:
+                draft_service.delete_draft(self._identity, pid_value, uow=uow)
+                return None
         raise ValueError(f"Unknown operation type: {op_type}")
+
+    def _revive(self, local: LocalRecord) -> None:
+        """Bring a hard deleted record back with its original pid.
+
+        Hard delete sets ``model.json`` to ``None``, but the previous revision still has
+        the full json - reverting to it undeletes the record (``is_deleted`` is
+        ``json is None``). The harvested data is applied by the following update.
+        """
+        record = cast("Record", local.record)
+        pid = cast("PersistentIdentifier", local.deleted_pid)
+        last_revision = next((r for r in reversed(record.revisions) if r.model.json is not None), None)
+        if last_revision is None:
+            raise ValueError(f"Hard deleted record {local.pid_value} has no revision to revive from.")
+        pid.status = PIDStatus.REGISTERED
+        db.session.add(pid)
+        record.revert(last_revision.revision_id)
+
+    def _update(self, record_data: dict, pid_value: str, uow: UnitOfWork) -> dict:
+        """Update a live record; draft services do not allow direct update, so go through a draft."""
+        if not self._publish:
+            return cast("dict", self.service.update(self._identity, pid_value, record_data, uow=uow).to_dict())
+        draft_service = cast("DraftRecordService", self.service)
+        # edit returns the existing draft if there is one - it gets overwritten by the harvested data
+        draft_service.edit(self._identity, pid_value, uow=uow)
+        return cast(
+            "dict",
+            draft_service.update_draft(self._identity, pid_value, record_data, uow=uow).to_dict(),
+        )
 
     def write_many(self, stream_entries: list[StreamEntry], *args: Any, **kwargs: Any) -> list[StreamEntry]:
         """Write the input entries using a given service."""
