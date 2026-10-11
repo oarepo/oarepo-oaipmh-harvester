@@ -72,3 +72,103 @@ def test_start_harvest_via_service(app, db, search_clear, harvester, mocker):
     current_oai_harvester_service.harvest(system_identity, harvester)
     # the task takes keyword arguments only
     delay.assert_called_once_with(harvester_id=harvester)
+
+
+def test_harvest_continues_after_record_failure(
+    app, db, search_clear, test_model, test_service, location, harvester, mocker
+):
+    """An exception transforming one record is stored on its harvest record, the harvest goes on."""
+    import marshmallow as ma
+    from invenio_db import db as _db
+
+    from oarepo_oaipmh_harvester.oai_record.models import OAIHarvestedRecord
+    from oarepo_oaipmh_harvester.transformers.oai_import import OAIImportTransformer
+
+    mocker.patch(
+        "oaipmh_scythe.client.Scythe._request",
+        side_effect=OAIPMHResponses(Path(__file__).parent / "oai_responses"),
+    )
+    original_apply = OAIImportTransformer.apply
+
+    def failing_apply(self, stream_entry, *args, **kwargs):
+        if stream_entry.entry["record"].header.identifier == "oai:zenodo.org:1":
+            raise ma.ValidationError({"metadata": {"license": ["Missing vocabulary iri"]}})
+        return original_apply(self, stream_entry, *args, **kwargs)
+
+    mocker.patch.object(OAIImportTransformer, "apply", failing_apply)
+
+    harvest_oaipmh_records(harvester_id=harvester, since=None, batch_size=1)
+
+    failed = _db.session.query(OAIHarvestedRecord).filter_by(oai_identifier="oai:zenodo.org:1").one()
+    assert failed.has_errors is True
+    assert failed.record_pid is None
+    assert failed.errors[0]["type"] == "ValidationError"
+    assert "Missing vocabulary iri" in failed.errors[0]["message"]
+
+    # the other record was harvested (created, then deleted at the source)
+    other = _db.session.query(OAIHarvestedRecord).filter_by(oai_identifier="oai:zenodo.org:2").one()
+    assert other.has_errors is False
+    assert other.deleted is True
+    assert other.record_pid is not None
+
+
+def test_transformer_errors_without_exception_are_stored(
+    app, db, search_clear, test_model, test_service, location, harvester, mocker
+):
+    """Errors reported by a transformer in `errors` (not raised) end up on the harvest record too."""
+    from invenio_db import db as _db
+
+    from oarepo_oaipmh_harvester.oai_record.models import OAIHarvestedRecord
+    from oarepo_oaipmh_harvester.transformers.oai_import import OAIImportTransformer
+
+    mocker.patch(
+        "oaipmh_scythe.client.Scythe._request",
+        side_effect=OAIPMHResponses(Path(__file__).parent / "oai_responses"),
+    )
+    original_apply = OAIImportTransformer.apply
+
+    def apply_with_errors(self, stream_entry, *args, **kwargs):
+        result = original_apply(self, stream_entry, *args, **kwargs)
+        if result.entry["oai_record"].header.identifier == "oai:zenodo.org:1":
+            result.errors.append("bad license")
+        return result
+
+    mocker.patch.object(OAIImportTransformer, "apply", apply_with_errors)
+
+    harvest_oaipmh_records(harvester_id=harvester, since=None, batch_size=1)
+
+    failed = _db.session.query(OAIHarvestedRecord).filter_by(oai_identifier="oai:zenodo.org:1").one()
+    assert failed.has_errors is True
+    assert failed.record_pid is None
+    assert failed.errors[0]["type"] == "TransformerError"
+    assert "bad license" in failed.errors[0]["message"]
+
+
+def test_writer_exception_does_not_stop_harvest(
+    app, db, search_clear, test_model, test_service, location, harvester, mocker
+):
+    """An exception escaping the writer (here: storing the harvest record) affects only its record."""
+    from invenio_db import db as _db
+
+    from oarepo_oaipmh_harvester.oai_record.models import OAIHarvestedRecord
+    from oarepo_oaipmh_harvester.writers.oai_service import OAIServiceWriter
+
+    mocker.patch(
+        "oaipmh_scythe.client.Scythe._request",
+        side_effect=OAIPMHResponses(Path(__file__).parent / "oai_responses"),
+    )
+    original_get = OAIServiceWriter._get_oai_record
+
+    def failing_get(self, oai_identifier):
+        if oai_identifier == "oai:zenodo.org:1":
+            raise RuntimeError("database hiccup")
+        return original_get(self, oai_identifier)
+
+    mocker.patch.object(OAIServiceWriter, "_get_oai_record", failing_get)
+
+    harvest_oaipmh_records(harvester_id=harvester, since=None, batch_size=1)
+
+    assert _db.session.query(OAIHarvestedRecord).filter_by(oai_identifier="oai:zenodo.org:1").count() == 0
+    other = _db.session.query(OAIHarvestedRecord).filter_by(oai_identifier="oai:zenodo.org:2").one()
+    assert other.has_errors is False
+    assert other.deleted is True

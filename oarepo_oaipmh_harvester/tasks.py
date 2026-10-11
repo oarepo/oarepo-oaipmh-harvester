@@ -13,6 +13,10 @@ harvester and builds an invenio-vocabularies datastream from it:
   and `identifiers` filled in unless given in the loader options;
 * transformers and writers - the harvester's `transformers` / `writers`.
 
+Transformers and writers are wrapped by
+[create_datastream][oarepo_oaipmh_harvester.datastream.create_datastream] - a failure of a
+single record is stored on its harvest record and the harvest continues.
+
 Each definition is a string `name{options}` where options are a JSON5 object
 ([parse_config][oarepo_oaipmh_harvester.tasks.parse_config]); `harvester_id` is always
 added to the options. The names are looked up in `VOCABULARIES_DATASTREAM_READERS` /
@@ -33,8 +37,8 @@ import json5
 from celery.app import shared_task
 from flask import current_app
 from invenio_jobs.jobs import JobType
-from invenio_vocabularies.datastreams.factories import DataStreamFactory
 
+from oarepo_oaipmh_harvester.datastream import create_datastream
 from oarepo_oaipmh_harvester.oai_harvester.api import OAIHarvesterAggregate
 from oarepo_oaipmh_harvester.oai_harvester.models import OAIHarvester
 
@@ -98,16 +102,17 @@ def harvest_oaipmh_records(
     readers_config = create_readers(harvester, since=since, oai_ids=oai_ids)
     transformers_config = create_transformers(harvester)
     writers_config = create_writers(harvester)
-    datastream = DataStreamFactory.create(
+    datastream = create_datastream(
         readers_config=[readers_config],
         transformers_config=transformers_config,
         writers_config=writers_config,
         batch_size=batch_size or current_app.config["OAI_HARVESTER_DEFAULT_BATCH_SIZE"],
     )
     for _entry in datastream.process():
-        oai_identifier = _entry.entry["oai_record"].header.identifier
-        if _entry.errors:
-            current_app.logger.error("Entry %s: errors: %s", oai_identifier, _entry.errors)
+        oai_record = _entry.entry.get("oai_record") if isinstance(_entry.entry, dict) else None
+        oai_identifier = oai_record.header.identifier if oai_record is not None else "<unknown>"
+        if _entry.errors or _entry.exc:
+            current_app.logger.error("Entry %s: errors: %s %s", oai_identifier, _entry.errors, _entry.exc or "")
         else:
             current_app.logger.info("Entry %s: processed successfully", oai_identifier)
 
