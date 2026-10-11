@@ -13,16 +13,19 @@ from __future__ import annotations
 import contextlib
 import datetime
 import json
+from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, cast, override
 
 from flask import current_app
 from invenio_access.permissions import system_identity
 from invenio_db import db
 from invenio_db.uow import UnitOfWork
-from invenio_pidstore.errors import PersistentIdentifierError
+from invenio_pidstore.errors import PersistentIdentifierError, PIDDeletedError
 from invenio_records.dictutils import dict_lookup
 from invenio_vocabularies.datastreams.writers import BaseWriter
 from oarepo_runtime import current_runtime
+from sqlalchemy.orm.exc import NoResultFound
 
 from oarepo_oaipmh_harvester.oai_record.models import (
     OAIHarvestedRecord,
@@ -43,6 +46,93 @@ if TYPE_CHECKING:
 
 # TODO: the writer does not solve the case of dangling draft records
 MAX_TRACEBACK_VARIABLE_LENGTH = 100
+
+
+class LocalState(StrEnum):
+    """State of the local record that corresponds to a harvested OAI record."""
+
+    ABSENT = "absent"
+    """No local record nor draft."""
+
+    LIVE = "live"
+    """Published, not deleted record (or a plain record for models without drafts)."""
+
+    DRAFT_ONLY = "draft_only"
+    """No published record (or a hard deleted one), but a draft exists."""
+
+    TOMBSTONED = "tombstoned"
+    """RDM record soft-deleted via ``delete_record`` (deletion status ``D`` or ``X``)."""
+
+    HARD_DELETED = "hard_deleted"
+    """Record deleted via ``service.delete`` - ``model.is_deleted`` set, pid status ``D``."""
+
+
+@dataclass(frozen=True)
+class LocalRecord:
+    """Local record state together with the resolved record and draft (if any)."""
+
+    state: LocalState
+    pid_value: str | None = None
+    is_rdm: bool = False
+    """Service supports rdm deletion workflow (tombstones via ``delete_record``)."""
+    record: Record | None = None
+    draft: Record | None = None
+
+    @classmethod
+    def resolve(cls, service: RecordService, pid_value: str | None, *, with_drafts: bool) -> LocalRecord:
+        """Find the local record (and draft) for the pid value and classify its state."""
+        is_rdm = hasattr(service, "delete_record")
+        if not pid_value:
+            return cls(LocalState.ABSENT, pid_value, is_rdm)
+
+        record_cls = service.record_cls
+        record = None
+        state = LocalState.ABSENT
+        try:
+            record = record_cls.pid.resolve(pid_value)
+        except PIDDeletedError as e:
+            # hard (non-tombstone) delete: the resolver does not return the record,
+            # so load it including deleted ones
+            state = LocalState.HARD_DELETED
+            if e.pid.object_uuid:
+                with contextlib.suppress(NoResultFound):
+                    record = record_cls.get_record(e.pid.object_uuid, with_deleted=True)
+        except PersistentIdentifierError, NoResultFound:
+            # NoResultFound: rdm draft-only record - pid points to the draft, not to a record
+            pass
+        else:
+            deletion_status = getattr(record, "deletion_status", None)
+            if deletion_status is not None and deletion_status.is_deleted:
+                state = LocalState.TOMBSTONED
+            else:
+                return cls(LocalState.LIVE, pid_value, is_rdm, record)
+
+        draft = None
+        if with_drafts:
+            draft_cls = cast("DraftRecordService", service).draft_cls
+            # registered_only=False - drafts that were never published have a NEW pid
+            with contextlib.suppress(PersistentIdentifierError, NoResultFound):
+                draft = draft_cls.pid.resolve(pid_value, registered_only=False)
+        if draft is not None and state is not LocalState.TOMBSTONED:
+            state = LocalState.DRAFT_ONLY
+        return cls(state, pid_value, is_rdm, record, draft)
+
+    def operation(self, oai_deleted: bool) -> str:
+        """Determine the operation that brings the local record to the harvested state."""
+        # TODO: tombstoned / hard deleted records are handled in step 3 of delete_steps.md;
+        # for now they keep the original behaviour (tombstone resolves as a record,
+        # hard deleted does not)
+        if oai_deleted:
+            if self.state in (LocalState.LIVE, LocalState.TOMBSTONED):
+                return "delete"
+            if self.state is LocalState.DRAFT_ONLY:
+                return "delete_draft"
+            return "noop"
+        if self.state in (LocalState.LIVE, LocalState.TOMBSTONED):
+            return "update"
+        if self.state is LocalState.DRAFT_ONLY:
+            return "update_draft"
+        return "create"
 
 
 class OAIServiceWriter(BaseWriter):
@@ -116,25 +206,17 @@ class OAIServiceWriter(BaseWriter):
         if not pid_value and not oai_deleted:
             pid_value = self._get_pid_value_from_record(transformed_data)
 
-        # 3. try to get an existing record by pid_value
-        existing_record = None
-        existing_draft = None
-        if pid_value:
-            try:
-                existing_record = self.service.record_cls.pid.resolve(pid_value)
-            except PersistentIdentifierError:
-                if self._publish:
-                    draft_cls = cast("DraftRecordService", self.service).draft_cls
-                    with contextlib.suppress(PersistentIdentifierError):
-                        existing_draft = draft_cls.pid.resolve(pid_value)
+        # 3. find out the state of the local record
+        local = LocalRecord.resolve(self.service, pid_value, with_drafts=self._publish)
 
-        # 5. decide on operation type
-        op_type = self._determine_operation_type(oai_deleted, existing_record, existing_draft)
+        # 4. decide on operation type
+        op_type = local.operation(oai_deleted)
         current_app.logger.debug(
-            "Determined operation type '%s' for OAI identifier %s (pid_value=%s)",
+            "Determined operation type '%s' for OAI identifier %s (pid_value=%s, local state=%s)",
             op_type,
             oai_identifier,
             pid_value,
+            local.state,
         )
         written_data = None
         exception_raised = None
@@ -142,7 +224,7 @@ class OAIServiceWriter(BaseWriter):
         try:
             written_data = self._save_and_publish_record(
                 transformed_data,
-                pid_value,
+                local,
                 op_type,
                 stream_entry,
                 oai_identifier,
@@ -174,32 +256,10 @@ class OAIServiceWriter(BaseWriter):
         stream_entry.op_type = op_type
         return stream_entry
 
-    def _determine_operation_type(
-        self,
-        oai_deleted: bool,
-        existing_record: Record | None,
-        existing_draft: Record | None,
-    ) -> str:
-        """Determine the operation type based on existing records and deletion status."""
-        if oai_deleted:
-            if existing_record is not None:
-                op_type = "delete"
-            elif existing_draft is not None:
-                op_type = "delete_draft"
-            else:
-                op_type = "noop"
-        elif existing_record is not None:
-            op_type = "update"
-        elif existing_draft is not None:
-            op_type = "update_draft"
-        else:
-            op_type = "create"
-        return op_type
-
     def _save_and_publish_record(
         self,
         transformed_data: dict,
-        pid_value: str | None,
+        local: LocalRecord,
         op_type: str,
         stream_entry: StreamEntry,
         oai_identifier: str,
@@ -208,7 +268,7 @@ class OAIServiceWriter(BaseWriter):
 
         Args:
             transformed_data: The transformed record data to be saved.
-            pid_value: The persistent identifier value of the record.
+            local: The local record (state, pid value) the operation is applied to.
             op_type: The operation type (create, update, delete, etc.).
             stream_entry: The stream entry being processed.
             oai_identifier: The OAI identifier of the record.
@@ -223,7 +283,7 @@ class OAIServiceWriter(BaseWriter):
             # resolve lazy strings before writing
             transformed_data = json.loads(json.dumps(transformed_data, default=str))
             try:
-                written_data = self._write(transformed_data, pid_value, op_type, uow)
+                written_data = self._write(transformed_data, local, op_type, uow)
             except Exception:
                 current_app.logger.exception(
                     "Error during '%s' operation for OAI identifier %s",
@@ -356,8 +416,9 @@ class OAIServiceWriter(BaseWriter):
 
         current_oai_record_service.indexer.bulk_index([oai_record.oai_identifier])
 
-    def _write(self, record_data: dict, pid_value: str | None, op_type: str, uow: UnitOfWork) -> dict | None:
+    def _write(self, record_data: dict, local: LocalRecord, op_type: str, uow: UnitOfWork) -> dict | None:
         """Write the record data using the service."""
+        pid_value = local.pid_value
         if op_type == "noop":
             return None
         if op_type == "create":

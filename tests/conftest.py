@@ -16,10 +16,12 @@ from flask_resources.deserializers import DeserializerMixin
 from invenio_access.models import ActionUsers
 from invenio_access.permissions import system_identity
 from invenio_app.factory import create_app as _create_app
+from invenio_vocabularies.proxies import current_service as current_vocabularies_service
 from lxml import etree
 from oarepo_model.api import model
 from oarepo_model.customizations import AddMetadataImport
 from oarepo_model.presets.records_resources import records_resources_preset
+from oarepo_rdm.model.presets import rdm_complete_preset
 
 from oarepo_oaipmh_harvester.proxies import current_oai_harvester_service
 
@@ -192,10 +194,24 @@ _test_model = model(
 )
 _test_model.register()
 
+# RDM flavoured model (drafts, tombstones) for testing deletion handling
+_rdm_test_model = model(
+    "rdmtest",
+    presets=[rdm_complete_preset],
+    types=[{"Metadata": {"properties": {}}}],
+    metadata_type="Metadata",
+)
+_rdm_test_model.register()
+
 
 @pytest.fixture(scope="session", autouse=True)
 def test_model():
     return _test_model
+
+
+@pytest.fixture(scope="session", autouse=True)
+def rdm_test_model():
+    return _rdm_test_model
 
 
 @pytest.fixture(scope="module")
@@ -205,6 +221,11 @@ def app_config(app_config, test_model):
     app_config["CELERY_TASK_ALWAYS_EAGER"] = True
     # disable session protection for tests to avoid issues with Flask-Login
     app_config["SESSION_PROTECTION"] = None
+    # minimal RDM setup - no DOIs, no moderation, metadata-only records allowed
+    app_config["RDM_PERSISTENT_IDENTIFIERS"] = {}
+    app_config["RDM_USER_MODERATION_ENABLED"] = False
+    app_config["RDM_ALLOW_METADATA_ONLY_RECORDS"] = True
+    app_config["RDM_DEFAULT_FILES_ENABLED"] = False
     return app_config
 
 
@@ -245,3 +266,36 @@ def harvester(app, db, search_clear):
     current_oai_harvester_service.create(system_identity, harvester_data)
     db.session.commit()
     return "test"
+
+
+@pytest.fixture
+def resource_type_vocabulary(app, db):
+    """Resource type used by rdm records (also drives CSL type for tombstone citations)."""
+    current_vocabularies_service.create_type(system_identity, "resourcetypes", "rsrct")
+    current_vocabularies_service.create(
+        system_identity,
+        {
+            "id": "dataset",
+            "type": "resourcetypes",
+            "title": {"en": "Dataset"},
+            "props": {"csl": "dataset", "datacite_general": "Dataset", "datacite_type": ""},
+            "tags": ["depositable", "linkable"],
+        },
+    )
+    current_vocabularies_service.indexer.refresh()
+
+
+@pytest.fixture
+def rdm_record_data(resource_type_vocabulary):
+    """Minimal valid data for a record of the rdm test model."""
+    return {
+        "metadata": {
+            "resource_type": {"id": "dataset"},
+            "title": "Record 1",
+            "publication_date": "2025-01-01",
+            "creators": [
+                {"person_or_org": {"type": "personal", "given_name": "Jane", "family_name": "Doe"}},
+            ],
+        },
+        "files": {"enabled": False},
+    }
