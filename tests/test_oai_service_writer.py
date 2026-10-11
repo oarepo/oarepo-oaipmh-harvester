@@ -11,22 +11,39 @@ from __future__ import annotations
 import datetime as dt
 from types import SimpleNamespace
 
+import pytest
 from invenio_access.permissions import system_identity
+from invenio_db import db
 from invenio_vocabularies.datastreams.datastreams import StreamEntry
 from oarepo_runtime import current_runtime
 
 from oarepo_oaipmh_harvester.oai_record.models import OAIHarvestedRecord
-from oarepo_oaipmh_harvester.writers.oai_service import LocalRecord, LocalState, OAIServiceWriter
+from oarepo_oaipmh_harvester.writers.oai_service import LocalRecord, LocalState, OAIServiceWriter, Operation
 
 
-def _entry(datestamp: dt.datetime, *, deleted: bool) -> StreamEntry:
+def _entry(datestamp: dt.datetime, *, deleted: bool, record: dict | None = None) -> StreamEntry:
     header = SimpleNamespace(identifier="oai:test:1", datestamp=datestamp, deleted=deleted)
     return StreamEntry(
         {
             "oai_record": SimpleNamespace(header=header, raw="<record/>"),
-            "record": {"metadata": {"title": {"value": "Record 1"}}, "files": {"enabled": False}},
+            "record": record or {"metadata": {"title": {"value": "Record 1"}}, "files": {"enabled": False}},
         }
     )
+
+
+def _harvest(writer: OAIServiceWriter, day: int, *, deleted: bool = False, record: dict | None = None) -> str:
+    """Write a harvested entry with a datestamp of the given day, return the operation performed."""
+    datestamp = dt.datetime(2025, 1, day, tzinfo=dt.UTC)
+    entry = writer.write(_entry(datestamp, deleted=deleted, record=record))
+    assert not entry.errors, entry.errors
+    # exceptions raised by the service are stored on the oai record only
+    oai_record = db.session.query(OAIHarvestedRecord).filter_by(oai_identifier="oai:test:1").one()
+    assert not oai_record.has_errors, oai_record.errors
+    return entry.op_type
+
+
+def _oai_record(db) -> OAIHarvestedRecord:
+    return db.session.query(OAIHarvestedRecord).filter_by(oai_identifier="oai:test:1").one()
 
 
 def test_existing_oai_record_gets_new_datestamp_and_deleted(app, db, search_clear, test_model, location, harvester):
@@ -89,3 +106,109 @@ def test_resolve_local_rdm_record(app, db, search_clear, rdm_test_model, locatio
     local = resolve(pid_value)
     assert local.state is LocalState.TOMBSTONED
     assert local.record.deletion_status.is_deleted
+
+
+def test_harvest_wins_plain_model(app, db, search_clear, test_model, location, harvester):
+    writer = OAIServiceWriter("test", publish=False, harvester_id=harvester)
+    service = writer.service
+
+    assert _harvest(writer, 1) == Operation.CREATE
+    pid_value = _oai_record(db).record_pid
+
+    assert _harvest(writer, 2, deleted=True) == Operation.DELETE
+    assert LocalRecord.resolve(service, pid_value, with_drafts=False).state is LocalState.HARD_DELETED
+    assert _harvest(writer, 3, deleted=True) == Operation.NOOP
+
+    # hard deleted record is revived with its original pid
+    record = {"metadata": {"title": {"value": "Record 2"}}, "files": {"enabled": False}}
+    assert _harvest(writer, 4, record=record) == Operation.REVIVE
+    assert _oai_record(db).record_pid == pid_value
+    assert service.read(system_identity, pid_value)["metadata"]["title"] == {"value": "Record 2"}
+
+
+def _rdm_data(rdm_record_data: dict, title: str) -> dict:
+    return {**rdm_record_data, "metadata": {**rdm_record_data["metadata"], "title": title}}
+
+
+def test_harvest_wins_rdm_model(app, db, search_clear, rdm_test_model, location, harvester, rdm_record_data):
+    writer = OAIServiceWriter("rdmtest", publish=True, harvester_id=harvester)
+    service = writer.service
+
+    assert _harvest(writer, 1, record=_rdm_data(rdm_record_data, "Title v1")) == Operation.CREATE
+    pid_value = _oai_record(db).record_pid
+    assert service.read(system_identity, pid_value)["metadata"]["title"] == "Title v1"
+
+    assert _harvest(writer, 2, record=_rdm_data(rdm_record_data, "Title v2")) == Operation.UPDATE
+    assert service.read(system_identity, pid_value)["metadata"]["title"] == "Title v2"
+
+    assert _harvest(writer, 3, deleted=True) == Operation.DELETE_RECORD
+    local = LocalRecord.resolve(service, pid_value, with_drafts=True)
+    assert local.state is LocalState.TOMBSTONED
+    assert local.record.tombstone.note == "Deleted at the OAI-PMH source (oai:test:1)"
+    assert _harvest(writer, 4, deleted=True) == Operation.NOOP
+
+    assert _harvest(writer, 5, record=_rdm_data(rdm_record_data, "Title v3")) == Operation.RESTORE
+    assert _oai_record(db).record_pid == pid_value
+    assert service.read(system_identity, pid_value)["metadata"]["title"] == "Title v3"
+
+
+def test_harvest_restores_record_marked_for_purge(
+    app, db, search_clear, rdm_test_model, location, harvester, rdm_record_data
+):
+    writer = OAIServiceWriter("rdmtest", publish=True, harvester_id=harvester)
+    service = writer.service
+
+    _harvest(writer, 1, record=_rdm_data(rdm_record_data, "Title v1"))
+    pid_value = _oai_record(db).record_pid
+    # deleted and marked for purge locally, not at the source
+    service.delete_record(system_identity, pid_value, {"note": "local delete"})
+    service.mark_record_for_purge(system_identity, pid_value)
+
+    assert _harvest(writer, 2, record=_rdm_data(rdm_record_data, "Title v2")) == Operation.RESTORE
+    assert service.read(system_identity, pid_value)["metadata"]["title"] == "Title v2"
+
+
+def test_failed_update_rolls_back_restore(app, db, search_clear, rdm_test_model, location, harvester, rdm_record_data):
+    writer = OAIServiceWriter("rdmtest", publish=True, harvester_id=harvester)
+    service = writer.service
+
+    _harvest(writer, 1, record=_rdm_data(rdm_record_data, "Title v1"))
+    pid_value = _oai_record(db).record_pid
+    _harvest(writer, 2, deleted=True)
+
+    # title too short - validation error during the update following the restore
+    entry = writer.write(
+        _entry(dt.datetime(2025, 1, 3, tzinfo=dt.UTC), deleted=False, record=_rdm_data(rdm_record_data, "v2"))
+    )
+    assert entry.errors
+    assert _oai_record(db).has_errors is True
+    assert LocalRecord.resolve(service, pid_value, with_drafts=True).state is LocalState.TOMBSTONED
+
+
+def test_harvest_revives_hard_deleted_rdm_record(
+    app, db, search_clear, rdm_test_model, location, harvester, rdm_record_data
+):
+    writer = OAIServiceWriter("rdmtest", publish=True, harvester_id=harvester)
+    service = writer.service
+
+    _harvest(writer, 1, record=_rdm_data(rdm_record_data, "Title v1"))
+    pid_value = _oai_record(db).record_pid
+    parent_id = service.read(system_identity, pid_value)["parent"]["id"]
+    # hard delete, as done by previous versions of the writer
+    service.delete(system_identity, pid_value)
+    db.session.commit()
+    # cleanup_drafts celery beat task (hourly) hard deletes the soft-deleted draft row
+    service.cleanup_drafts(dt.timedelta(0), search_gc_deletes=0)
+    db.session.commit()
+    record_id = LocalRecord.resolve(service, pid_value, with_drafts=True).record.id
+    assert service.draft_cls.model_cls.query.filter_by(id=record_id).count() == 0
+
+    assert _harvest(writer, 2, record=_rdm_data(rdm_record_data, "Title v2")) == Operation.REVIVE
+    read = service.read(system_identity, pid_value)
+    assert read["metadata"]["title"] == "Title v2"
+    assert read["parent"]["id"] == parent_id
+
+
+def test_rdm_model_requires_publish(app, rdm_test_model):
+    with pytest.raises(ValueError, match="publish=True"):
+        OAIServiceWriter("rdmtest", publish=False)
