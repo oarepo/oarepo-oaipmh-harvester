@@ -17,30 +17,9 @@ from invenio_indexer.tasks import process_bulk_queue
 from oarepo_runtime import current_runtime
 
 from oarepo_oaipmh_harvester.proxies import (
-    current_oai_harvester_service,
     current_oai_record_service,
 )
 from oarepo_oaipmh_harvester.tasks import harvest_oaipmh_records
-
-
-@pytest.fixture
-def harvester(app, db, search_clear):
-    harvester_data = {
-        "id": "test",
-        "name": "Test Harvester",
-        "base_url": "https://zenodo.org/oai2d",
-        "metadata_prefix": "oai_dc",
-        "setspec": "",
-        "loader": "oai-pmh",
-        "transformers": ['oai-import{"model":"test"}'],
-        "writers": ['oai-service{"model":"test","update":true,"publish":false}'],
-        "harvest_managers": ["1"],
-        "comment": "This is a test harvester.",
-    }
-
-    current_oai_harvester_service.create(system_identity, harvester_data)
-    db.session.commit()
-    return "test"
 
 
 class OAIPMHResponses:
