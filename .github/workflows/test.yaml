@@ -6,9 +6,11 @@
 name: Tests
 
 on:
-  push: {}
+  push:
+    branches: [main]
+  pull_request: {}
   schedule:
-    - cron: "0 1 * * 6"  # Every Sunday at 01:00 UTC
+    - cron: "0 1 * * 6"  # Every Saturday at 01:00 UTC
   workflow_dispatch: {}
 
 jobs:
