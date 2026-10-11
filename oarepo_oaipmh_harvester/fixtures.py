@@ -11,12 +11,16 @@ Registered via the `oarepo.fixtures` entry point. Each YAML entry uses the keys 
 When `model` is given and `transformer` / `writer` are not, the defaults are
 `oai-import{model:...}` and `oai-service{model:...}`, as in the command line.
 
+`community` (optional) is the slug of a community; it is passed as the `community` option
+to every `oai-service` writer, which adds all harvested records to that community.
+
 `harvest-manager` entries are e-mail addresses of existing users (or `{"user": id}`
 dictionaries); they are stored as user ids.
 """
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from flask import current_app
@@ -26,6 +30,15 @@ from invenio_rdm_records.fixtures.fixture import FixtureMixin
 
 from oarepo_oaipmh_harvester.cli import lookup_user
 from oarepo_oaipmh_harvester.proxies import current_oai_harvester_service
+from oarepo_oaipmh_harvester.tasks import parse_config
+
+
+def _with_community(writer: str, community: str) -> str:
+    """Add the `community` option to an `oai-service` writer definition, keep other writers as they are."""
+    type_, args = parse_config(writer)
+    if type_ != "oai-service":
+        return writer
+    return f"{type_}{json.dumps({**args, 'community': community})}"
 
 
 class HarvestersFixture(FixtureMixin):
@@ -42,6 +55,10 @@ class HarvestersFixture(FixtureMixin):
                 transformers = [f'oai-import{{model:"{model}"}}']
             if not writers:
                 writers = [f'oai-service{{model:"{model}"}}']
+
+        community = entry.pop("community", None)
+        if community:
+            writers = [_with_community(writer, community) for writer in writers]
 
         harvester_data = {
             "id": entry.pop("id"),

@@ -36,6 +36,11 @@ Draft services do not allow updating published records, so updates go through ed
 update draft - publish unless `direct_update` is set. Records of rdm services are deleted
 with `delete_record` (tombstone with a note about the deletion at the source), other
 services with `delete`.
+
+Written records are added to the `community` writer option (slug or id) and to the
+communities listed by the transformer in `parent.communities.ids` of the transformed data.
+They are added directly (rdm `bulk_add`), without a community inclusion request; communities
+the record is already in are skipped, and the record is never removed from a community.
 """
 
 from __future__ import annotations
@@ -49,10 +54,12 @@ from typing import TYPE_CHECKING, Any, cast, override
 
 from flask import current_app
 from invenio_access.permissions import system_identity
+from invenio_communities.proxies import current_communities
 from invenio_db import db
 from invenio_db.uow import UnitOfWork
 from invenio_pidstore.errors import PersistentIdentifierError, PIDDeletedError
 from invenio_pidstore.models import PersistentIdentifier, PIDStatus
+from invenio_rdm_records.proxies import current_rdm_records
 from invenio_rdm_records.records.systemfields.deletion_status import RecordDeletionStatusEnum
 from invenio_records.dictutils import dict_lookup
 from invenio_records_resources.services.uow import RecordIndexOp
@@ -72,6 +79,7 @@ if TYPE_CHECKING:
     from invenio_drafts_resources.services.records import (
         RecordService as DraftRecordService,
     )
+    from invenio_rdm_records.records.api import RDMRecord
     from invenio_rdm_records.services.services import RDMRecordService
     from invenio_records_resources.records.api import Record
     from invenio_records_resources.services.records import RecordService
@@ -236,6 +244,7 @@ class OAIServiceWriter(BaseWriter):
         pid_field: str = "id",
         publish: bool = True,
         direct_update: bool = False,
+        community: str | None = None,
         **kwargs: Any,
     ):
         """Initialize the OAI service writer.
@@ -251,6 +260,8 @@ class OAIServiceWriter(BaseWriter):
             direct_update: Update published records via `service.update` instead of edit -
                 update draft - publish. Only for services that allow updating published
                 records (drafts services do not by default).
+            community: Slug (or id) of a community every written record is added to. Only
+                for rdm models.
 
         """
         self._model = model
@@ -260,15 +271,19 @@ class OAIServiceWriter(BaseWriter):
         self._identity = identity or system_identity
         self._publish = publish
         self._direct_update = direct_update
+        self._community = community
 
         super().__init__(
             *args,
             **kwargs,
         )
 
-        if not publish and hasattr(self.service, "delete_record"):
+        is_rdm = hasattr(self.service, "delete_record")
+        if not publish and is_rdm:
             # rdm records can not be updated directly, only via edit - update draft - publish
             raise ValueError(f"Model '{model}' uses rdm records service, the oai-service writer needs publish=True.")
+        if community and not is_rdm:
+            raise ValueError(f"Model '{model}' does not use rdm records service, it can not be added to communities.")
 
     @property
     def service(self) -> RecordService:
@@ -392,6 +407,8 @@ class OAIServiceWriter(BaseWriter):
         with UnitOfWork() as uow:
             # resolve lazy strings before writing
             transformed_data = json.loads(json.dumps(transformed_data, default=str))
+            # parent communities are not writable via the service, they are added after publishing
+            communities = self._pop_communities(transformed_data)
             try:
                 written_data = self._write(transformed_data, local, op_type, oai_identifier, uow)
             except Exception:
@@ -431,11 +448,39 @@ class OAIServiceWriter(BaseWriter):
                         dict_lookup(written_data, self._pid_field),
                         uow=uow,
                     )
+                if commit_transaction:
+                    self._add_to_communities(dict_lookup(written_data, self._pid_field), communities, uow)
             if commit_transaction:
                 uow.commit()
             else:
                 uow.rollback()
             return written_data, validation_errors
+
+    def _pop_communities(self, record_data: dict | None) -> list[str]:
+        """Remove `parent.communities` from the record data, return the writer's and the listed communities."""
+        # no record data for records deleted at the source
+        parent = (record_data or {}).get("parent") or {}
+        listed = (parent.pop("communities", None) or {}).get("ids") or []
+        # dict.fromkeys - remove duplicates, keep the order
+        return list(dict.fromkeys([*([self._community] if self._community else []), *listed]))
+
+    def _add_to_communities(self, pid_value: str, communities: list[str], uow: UnitOfWork) -> None:
+        """Add the published record to the communities (slugs or ids) it is not in yet.
+
+        `bulk_add` adds the record directly, without an inclusion request (allowed for system
+        processes only), also adds a subcommunity's parent and makes the community the default
+        one when the record has none.
+        """
+        for community in communities:
+            # resolved for each community - adding a subcommunity also adds its parent
+            record = cast("RDMRecord", self.service.record_cls.pid.resolve(pid_value))
+            if current_communities.service.record_cls.pid.resolve(community).id in record.parent.communities:
+                continue
+            errors = current_rdm_records.record_communities_service.bulk_add(
+                self._identity, community, [pid_value], uow=uow
+            )
+            if errors:
+                raise ValueError(f"Can not add record {pid_value} to community {community}: {errors[0]['message']}")
 
     def _get_oai_record(self, oai_identifier: str) -> OAIHarvestedRecord | None:
         """Get the OAIHarvestedRecord instance by its OAI identifier."""
