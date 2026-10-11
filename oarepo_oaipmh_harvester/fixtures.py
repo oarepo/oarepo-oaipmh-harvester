@@ -1,8 +1,5 @@
-#
-# Copyright (C) 2026 CESNET z.s.p.o.
-#
-# oarepo-oaipmh-harvester is free software; you can redistribute it and/or modify
-# it under the terms of the MIT License; see LICENSE file for more details.
+# SPDX-FileCopyrightText: 2026 CESNET z.s.p.o
+# SPDX-License-Identifier: MIT
 
 """``oai_harvesters`` fixture - harvesters loaded from ``app_data/oai_harvesters.yaml``.
 

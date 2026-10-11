@@ -1,10 +1,5 @@
-# noqa N999
-#
-# This file is part of Invenio.
-# Copyright (C) 2026 CESNET z.s.p.o.
-#
-# Invenio is free software; you can redistribute it and/or modify it
-# under the terms of the MIT License; see LICENSE file for more details.
+# SPDX-FileCopyrightText: 2026 CESNET z.s.p.o
+# SPDX-License-Identifier: MIT
 
 """Store oai harvest record datestamp and harvested_at as timezone aware (UTC) timestamps."""
 
