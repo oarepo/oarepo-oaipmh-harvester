@@ -15,7 +15,7 @@ successful run as ``since``, so scheduled runs are incremental.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, override
 
 from invenio_db import db
 from invenio_jobs.jobs import JobType
@@ -52,9 +52,10 @@ class OAIHarvestJob(JobType):
     task = harvest_oaipmh_records
 
     @classmethod
+    @override
     def build_task_arguments(
         cls,
-        job_obj: Job,  # noqa ARG003 for interface compatibility
+        job_obj: Job,
         since: datetime | str | None = None,
         **kwargs: Any,
     ) -> dict:
@@ -83,7 +84,8 @@ def register_oaipmh_job(harvester_id: str) -> None:
     """
     # create and register the job
     job_id = get_oaipmh_job_id(harvester_id)
-    current_jobs.registry._jobs.pop(job_id, None)  # unregister if exists # noqa SLF001
+    # unregister if exists
+    current_jobs.registry._jobs.pop(job_id, None)  # noqa SLF001 no public accessor
     current_jobs.registry.register(
         type(
             f"OAIHarvestJob_{job_id}",
@@ -111,7 +113,7 @@ def get_oaipmh_job(harvester_id: str) -> Job:
 def unregister_oaipmh_job(job_id: str) -> None:
     """Unregister an OAI-PMH harvester job."""
     # unregister the job
-    current_jobs.registry._jobs.pop(job_id, None)  # noqa SLF001
+    current_jobs.registry._jobs.pop(job_id, None)  # noqa SLF001 no public accessor
 
 
 def register_current_harvesters() -> None:
@@ -129,5 +131,5 @@ def register_current_harvesters() -> None:
         raise
     except KeyboardInterrupt:
         raise
-    except Exception:  # noqa BLE001
+    except Exception:  # noqa BLE001 ok here
         db.session.rollback()

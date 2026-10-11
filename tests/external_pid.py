@@ -55,7 +55,7 @@ class ExternalPIDFieldContextMixin:
 
     def create(self, record: Record) -> PersistentIdentifier:
         """Proxy to the field's create method."""
-        return self.field.create(record)  # type: ignore[attr-defined]
+        return self.field.create(record)
 
 
 class ExternalPIDField(PIDField):
@@ -87,18 +87,18 @@ class NoPIDStatusCheckFieldMixin:
 class ExternalPIDComponent(ServiceComponent):
     """Create the draft pid from the ``id`` in the input data."""
 
-    def create(self, identity: Any, data: dict | None = None, record: Record | None = None, **kwargs: Any) -> None:  # noqa: ARG002
+    def create(self, identity: Any, data: dict | None = None, record: Record | None = None, **kwargs: Any) -> None:
         """Create pid when the record is created."""
-        record["id"] = data["id"]  # type: ignore[index]
-        self.service.draft_cls.pid.create(record)  # type: ignore[attr-defined]
+        record["id"] = data["id"]
+        self.service.draft_cls.pid.create(record)
 
 
 class UpdateMetadataComponent(ServiceComponent):
     """Set metadata on direct update of a published record (rdm components only do it for drafts)."""
 
-    def update(self, identity: Any, data: dict | None = None, record: Record | None = None, **kwargs: Any) -> None:  # noqa: ARG002
+    def update(self, identity: Any, data: dict | None = None, record: Record | None = None, **kwargs: Any) -> None:
         """Inject the metadata into the record."""
-        record.metadata = (data or {}).get("metadata", {})  # type: ignore[union-attr]
+        record.metadata = (data or {}).get("metadata", {})
 
 
 class UpdatableRecordServiceMixin:
@@ -106,7 +106,7 @@ class UpdatableRecordServiceMixin:
 
     def update(self, identity: Any, id_: str, data: dict, *args: Any, **kwargs: Any) -> Any:
         """Update the published record via the plain records service."""
-        return super(DraftRecordService, self).update(identity, id_, data, *args, **kwargs)  # type: ignore[misc]
+        return super(DraftRecordService, self).update(identity, id_, data, *args, **kwargs)
 
 
 class UpdatePermissionPolicyMixin:

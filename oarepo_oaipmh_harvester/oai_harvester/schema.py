@@ -18,11 +18,6 @@ class HarvestManagerSchema(ma.Schema):
     user = fields.String(required=True)
     """The user ID of the harvest manager."""
 
-    class Meta:
-        """Meta class for HarvestManagerSchema."""
-
-        strict = True
-
 
 class OAIHarvesterSchema(BaseRecordSchema):
     """Schema for OAI Harvester."""
@@ -56,8 +51,3 @@ class OAIHarvesterSchema(BaseRecordSchema):
 
     harvest_managers = fields.List(fields.Nested(HarvestManagerSchema), load_default=list)
     """The list of writers."""
-
-    class Meta:
-        """Meta class for OAIHarvesterSchema."""
-
-        strict = True

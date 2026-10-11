@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 class OAIRecordAggregate(BaseAggregate):
     """An aggregate of information about a user."""
 
-    model_cls = OAIRecordAggregateModel  # type: ignore[reportAssignmentType]
+    model_cls = OAIRecordAggregateModel  # ty: ignore[invalid-assignment] monkeytype
     """The model class for the request."""
 
     dumper = SearchDumper(
@@ -82,7 +82,7 @@ class OAIRecordAggregate(BaseAggregate):
         with db.session.begin_nested():
             record = OAIHarvestedRecord(**data)
             db.session.add(record)
-            return cls.from_model(record)  # type: ignore[no-any-return]
+            return cls.from_model(record)
 
     @classmethod
     @override
@@ -90,4 +90,4 @@ class OAIRecordAggregate(BaseAggregate):
         """Get the user via the specified ID."""
         with db.session.no_autoflush:
             record = OAIHarvestedRecord.query.get(id_)
-            return cls.from_model(record)  # type: ignore[no-any-return]
+            return cls.from_model(record)

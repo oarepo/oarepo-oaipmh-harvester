@@ -95,7 +95,7 @@ class OAIHarvesterAggregateModel(AggregateMetadata):
     """Properties of this object that can be set."""
 
     @property
-    def model_obj(self) -> OAIHarvester:  # type: ignore[reportIncompatibleMethodOverride]
+    def model_obj(self) -> OAIHarvester:
         """The actual model object behind this user aggregate."""
         if self._model_obj is None:
             _id = (self._data or {}).get("id")

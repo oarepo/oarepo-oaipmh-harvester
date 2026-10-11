@@ -17,11 +17,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import oaipmh_scythe
 from invenio_vocabularies.datastreams.datastreams import StreamEntry
 from invenio_vocabularies.datastreams.errors import TransformerError
 from invenio_vocabularies.datastreams.transformers import BaseTransformer
-from lxml import etree  # type: ignore[reportAttributeAccessIssue]
+from lxml import etree
+from oaipmh_scythe.models import Record as OAIRecord
 from oarepo_runtime import current_runtime
 
 if TYPE_CHECKING:
@@ -48,7 +48,7 @@ class OAIImportTransformer(BaseTransformer):
         """
         if not isinstance(stream_entry.entry, dict) or not isinstance(
             stream_entry.entry["record"],
-            oaipmh_scythe.models.Record,  # type: ignore[reportAttributeAccessIssue]
+            OAIRecord,
         ):
             raise TransformerError(
                 "OAIImport transformer requires entries to be oaipmh_scythe Record instances, "

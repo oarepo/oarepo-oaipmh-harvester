@@ -25,7 +25,7 @@ class OAIHarvesterItem(RecordItem):
 
     _data: dict | None
 
-    def __init__(  # noqa: PLR0913,PLR0917 # too many arguments
+    def __init__(  # noqa PLR0913,PLR0917
         self,
         service: OAIHarvesterService,
         identity: Identity,
@@ -58,7 +58,7 @@ class OAIHarvesterItem(RecordItem):
     def links(self) -> dict[str, str]:
         """Get links for this result item."""
         if self._links_tpl:
-            return self._links_tpl.expand(self._identity, self._oai_harvester)  # type: ignore[no-any-return]
+            return self._links_tpl.expand(self._identity, self._oai_harvester)
         return {}
 
     @property
@@ -85,7 +85,7 @@ class OAIHarvesterItem(RecordItem):
         if self._links_tpl:
             self._data["links"] = self.links
 
-        return self._data  # type: ignore[return-value]
+        return self._data
 
     @property
     @override

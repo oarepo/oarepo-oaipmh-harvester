@@ -45,7 +45,7 @@ def oai_harvester_permissions_decorator[**P, R_co](
             for manager in md.harvest_managers or []:
                 if "user" in manager:
                     manager_needs.add(UserNeed(manager["user"]))
-        oai_harvester_permission = Permission(administration_access_action, *manager_needs)  # type: ignore[reportArgumentType]
+        oai_harvester_permission = Permission(administration_access_action, *manager_needs)
 
         return cast(
             "R_co",
@@ -156,7 +156,11 @@ class OAIPMHDetailView(OAIHarvesterPermissionsMixin, AdminResourceDetailView):
     }
 
 
-class OAIHarvesterFormMixin:
+# the mixin is always combined with AdminFormView, which provides ``_schema_to_json``
+_FormViewBase = AdminFormView if TYPE_CHECKING else object
+
+
+class OAIHarvesterFormMixin(_FormViewBase):
     """Mixin to add OAI harvester form configuration to views."""
 
     request_headers: Mapping[str, str] = {"Accept": "application/json"}
@@ -220,7 +224,7 @@ class OAIHarvesterFormMixin:
 
     def _schema_to_json(self, schema: ma.Schema) -> dict[str, Any]:
         """Convert schema to JSON representation."""
-        ret: dict[str, Any] = super()._schema_to_json(schema)  # type: ignore[misc]
+        ret: dict[str, Any] = super()._schema_to_json(schema)
         # TODO: RDM13 has better support for admin fields, will need to be changed then
         ret.pop("harvest_managers", None)
         ret.pop("writers", None)

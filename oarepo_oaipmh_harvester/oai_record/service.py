@@ -69,7 +69,7 @@ class OAIRecordSearchOptions(SearchOptions, SearchOptionsMixin):
         fields=["oai_identifier^2", "harvester_id^2", "title^3"],
         type="most_fields",
         fuzziness="AUTO",
-    )  # type: ignore[assignment]  # partial vs. direct class
+    )
 
     params_interpreters_cls = (
         QueryStrParam,
@@ -92,10 +92,10 @@ class RecordLink(Link):
     """Short cut for writing record links."""
 
     @staticmethod
-    def vars(record: Any, vars: dict) -> None:  # noqa A002 keeping interface
+    def vars(record: Any, link_vars: dict) -> None:
         """Variables for the URI template."""
         # Some records don't have record.pid.pid_value yet (e.g. drafts)
-        vars.update({"id": record.id})
+        link_vars.update({"id": record.id})
 
 
 class OAIRecordServiceConfig(RecordServiceConfig, ConfiguratorMixin):
@@ -140,7 +140,7 @@ class OAIRecordServiceConfig(RecordServiceConfig, ConfiguratorMixin):
     }
     links_search = pagination_links("{+api}/oai/harvest/records{?args*}")
 
-    components = ()  # type: ignore[assignment]  # empty tuple vs. typed tuple
+    components = ()
 
 
 class OAIRecordService(RecordService):

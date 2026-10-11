@@ -12,18 +12,19 @@ class ActionLinks:
     """Action links for OAI-PMH Harvester.
 
     Normally contains a "harvest" link, but can be extended by other links.
+    Modelled after invenio links.
     """
 
     def __init__(self, actions_links: dict[str, Any]):
         """Initialize the ActionLinks."""
         self._actions_links = actions_links
 
-    def should_render(self, obj: Any, ctx: Any) -> bool:  # noqa ARG002
+    def should_render(self, obj: Any, ctx: Any) -> bool:  # noqa ARG002 params kept for overriding
         """Determine if the link should be rendered."""
         return True
 
     @staticmethod
-    def vars(obj: Any, vars: Any) -> None:  # noqa ARG002
+    def vars(obj: Any, _vars: Any) -> None:
         """Overwrite this method in subclasses."""
 
     def expand(self, obj: Any, context: Any) -> dict[str, Any]:
