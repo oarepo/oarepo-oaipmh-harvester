@@ -1,36 +1,41 @@
 # SPDX-FileCopyrightText: 2025-2026 CESNET z.s.p.o
 # SPDX-License-Identifier: MIT
 
-"""``oai-service`` writer - synchronizes local records with harvested ones.
+"""`oai-service` writer - synchronizes local records with harvested ones.
 
-Datastream configuration: ``oai-service{model:"<model>", ...}``, see
-:class:`OAIServiceWriter` for the options.
+Datastream configuration: `oai-service{model:"<model>", ...}`, see
+[OAIServiceWriter][oarepo_oaipmh_harvester.writers.oai_service.OAIServiceWriter] for the
+options.
 
 For each harvested entry the writer
 
-1. loads the harvest record (:class:`~oarepo_oaipmh_harvester.oai_record.models.OAIHarvestedRecord`)
-   of the OAI identifier; the local pid is taken from it, or - for a record harvested for
-   the first time - from the transformed data via the pid provider's
-   ``get_pid_value_from_record`` (records deposited locally with the same pid are taken
-   over);
-2. classifies the local record - :meth:`LocalRecord.resolve` returns a
-   :class:`LocalState` (absent, live, draft only, tombstoned, hard deleted) together with
-   the record and a local draft, if any;
-3. picks the :class:`Operation` that brings the local record to the harvested state -
-   :meth:`LocalRecord.operation`. The harvest always wins: locally deleted records are
-   restored (rdm tombstones, ``restore_record``) or revived (hard deleted records are
-   reverted to their last revision, keeping the pid), locally restored records are
-   deleted again, local edit drafts are overwritten or removed;
-4. skips the entry if the OAI datestamp and deleted flag are unchanged, the last write
-   had no errors and the local record is already in the harvested state;
-5. executes the operation inside a unit of work (multi-step operations such as restore
-   + update roll back together) and publishes drafts where needed;
+1. loads the harvest record
+   ([OAIHarvestedRecord][oarepo_oaipmh_harvester.oai_record.models.OAIHarvestedRecord]) of
+   the OAI identifier; the local pid is taken from it, or - for a record harvested for the
+   first time - from the transformed data via the pid provider's `get_pid_value_from_record`
+   (records deposited locally with the same pid are taken over);
+2. classifies the local record -
+   [LocalRecord.resolve][oarepo_oaipmh_harvester.writers.oai_service.LocalRecord.resolve]
+   returns a [LocalState][oarepo_oaipmh_harvester.writers.oai_service.LocalState] (absent,
+   live, draft only, tombstoned, hard deleted) together with the record and a local draft,
+   if any;
+3. picks the [Operation][oarepo_oaipmh_harvester.writers.oai_service.Operation] that brings
+   the local record to the harvested state -
+   [LocalRecord.operation][oarepo_oaipmh_harvester.writers.oai_service.LocalRecord.operation].
+   The harvest always wins: locally deleted records are restored (rdm tombstones,
+   `restore_record`) or revived (hard deleted records are reverted to their last revision,
+   keeping the pid), locally restored records are deleted again, local edit drafts are
+   overwritten or removed;
+4. skips the entry if the OAI datestamp and deleted flag are unchanged, the last write had
+   no errors and the local record is already in the harvested state;
+5. executes the operation inside a unit of work (multi-step operations such as restore +
+   update roll back together) and publishes drafts where needed;
 6. stores the harvest record with the datestamp, transformed data, local pid and errors.
 
 Draft services do not allow updating published records, so updates go through edit -
-update draft - publish unless ``direct_update`` is set. Records of rdm services are
-deleted with ``delete_record`` (tombstone with a note about the deletion at the source),
-other services with ``delete``.
+update draft - publish unless `direct_update` is set. Records of rdm services are deleted
+with `delete_record` (tombstone with a note about the deletion at the source), other
+services with `delete`.
 """
 
 from __future__ import annotations
@@ -79,7 +84,7 @@ MAX_TRACEBACK_VARIABLE_LENGTH = 100
 def _utc_datestamp(datestamp: str | dt.datetime) -> dt.datetime:
     """Parse an OAI datestamp into an aware UTC datetime, as stored in the db column.
 
-    The header datestamp is a string (``2025-01-01`` or ``2025-01-01T00:00:00Z``); without
+    The header datestamp is a string (`2025-01-01` or `2025-01-01T00:00:00Z`); without
     parsing it never equals the stored value and every harvest re-writes every record.
     OAI-PMH datestamps are always UTC, so a value without timezone is taken as UTC.
     """
@@ -103,10 +108,10 @@ class LocalState(StrEnum):
     """No published record (or a hard deleted one), but a draft exists."""
 
     TOMBSTONED = "tombstoned"
-    """RDM record soft-deleted via ``delete_record`` (deletion status ``D`` or ``X``)."""
+    """RDM record soft-deleted via `delete_record` (deletion status `D` or `X`)."""
 
     HARD_DELETED = "hard_deleted"
-    """Record deleted via ``service.delete`` - ``model.is_deleted`` set, pid status ``D``."""
+    """Record deleted via `service.delete` - `model.is_deleted` set, pid status `D`."""
 
 
 class Operation(StrEnum):
@@ -115,16 +120,16 @@ class Operation(StrEnum):
     NOOP = "noop"
     CREATE = "create"
     UPDATE = "update"
-    """Update a live record (for draft services: edit, update draft, publish - unless ``direct_update``)."""
+    """Update a live record (for draft services: edit, update draft, publish - unless `direct_update`)."""
     UPDATE_DRAFT = "update_draft"
     RESTORE = "restore"
     """Restore a tombstoned rdm record (unmarking it from purge if needed), then update it."""
     REVIVE = "revive"
     """Revert a hard deleted record to its last revision, re-register its pid, then update it."""
     DELETE = "delete"
-    """Delete via ``service.delete`` - for services without rdm deletion workflow."""
+    """Delete via `service.delete` - for services without rdm deletion workflow."""
     DELETE_RECORD = "delete_record"
-    """Tombstone via rdm ``delete_record``."""
+    """Tombstone via rdm `delete_record`."""
     DELETE_DRAFT = "delete_draft"
 
 
@@ -135,11 +140,11 @@ class LocalRecord:
     state: LocalState
     pid_value: str | None = None
     is_rdm: bool = False
-    """Service supports rdm deletion workflow (tombstones via ``delete_record``)."""
+    """Service supports rdm deletion workflow (tombstones via `delete_record`)."""
     record: Record | None = None
     draft: Record | None = None
     deleted_pid: PersistentIdentifier | None = None
-    """Pid of a hard deleted record (status ``D``)."""
+    """Pid of a hard deleted record (status `D`)."""
 
     @classmethod
     def resolve(cls, service: RecordService, pid_value: str | None, *, with_drafts: bool) -> LocalRecord:
@@ -235,16 +240,18 @@ class OAIServiceWriter(BaseWriter):
     ):
         """Initialize the OAI service writer.
 
-        :param model: name of the target model (``current_runtime.models``)
-        :param identity: identity used for the service calls, defaults to the system identity
-        :param update_all: write every record, even if it is up to date
-        :param harvester_id: harvester the harvest records belong to (set by the harvest task)
-        :param pid_field: path of the pid value in the service result
-        :param publish: publish created / updated drafts. Required (``ValueError``
-            otherwise) for rdm models; ``False`` only for models without drafts.
-        :param direct_update: update published records via ``service.update`` instead of
-            edit - update draft - publish. Only for services that allow updating published
-            records (drafts services do not by default).
+        Args:
+            model: Name of the target model (`current_runtime.models`).
+            identity: Identity used for the service calls, defaults to the system identity.
+            update_all: Write every record, even if it is up to date.
+            harvester_id: Harvester the harvest records belong to (set by the harvest task).
+            pid_field: Path of the pid value in the service result.
+            publish: Publish created / updated drafts. Required (`ValueError` otherwise) for
+                rdm models; `False` only for models without drafts.
+            direct_update: Update published records via `service.update` instead of edit -
+                update draft - publish. Only for services that allow updating published
+                records (drafts services do not by default).
+
         """
         self._model = model
         self._update_all = update_all
@@ -376,8 +383,8 @@ class OAIServiceWriter(BaseWriter):
 
         Returns:
             written_data: The data of the written record, or None if not applicable.
-            validation_errors: Errors reported by the service (``type``, ``location``,
-                ``message``); the transaction is rolled back if there are any.
+            validation_errors: Errors reported by the service (`type`, `location`,
+                `message`); the transaction is rolled back if there are any.
 
         """
         # we use unit of work here to avoid side effects
@@ -555,8 +562,9 @@ class OAIServiceWriter(BaseWriter):
     ) -> dict | None:
         """Write the record data using the service.
 
-        Operations other than ``NOOP`` and ``CREATE`` always have a pid value - a local
-        record without a pid is classified as ``ABSENT`` (see :meth:`LocalRecord.resolve`).
+        Operations other than `NOOP` and `CREATE` always have a pid value - a local
+        record without a pid is classified as `ABSENT` (see
+        [LocalRecord.resolve][oarepo_oaipmh_harvester.writers.oai_service.LocalRecord.resolve]).
         """
         match op_type:
             case Operation.NOOP:
@@ -580,7 +588,7 @@ class OAIServiceWriter(BaseWriter):
         raise ValueError(f"Unknown operation type: {op_type}")
 
     def _bring_back(self, local: LocalRecord, op_type: Operation, uow: UnitOfWork) -> None:
-        """Make a locally deleted record live again before it is updated (no-op for ``UPDATE``)."""
+        """Make a locally deleted record live again before it is updated (no-op for `UPDATE`)."""
         pid_value = cast("str", local.pid_value)
         if op_type is Operation.RESTORE:
             rdm_service = cast("RDMRecordService", self.service)
@@ -591,7 +599,7 @@ class OAIServiceWriter(BaseWriter):
             self._revive(local)
 
     def _delete(self, local: LocalRecord, op_type: Operation, oai_identifier: str, uow: UnitOfWork) -> None:
-        """Delete the local record (``DELETE`` / ``DELETE_RECORD``) and its local draft."""
+        """Delete the local record (`DELETE` / `DELETE_RECORD`) and its local draft."""
         pid_value = cast("str", local.pid_value)
         if op_type is Operation.DELETE:
             self.service.delete(self._identity, pid_value, uow=uow)
@@ -607,8 +615,8 @@ class OAIServiceWriter(BaseWriter):
     def _delete_local_draft(self, local: LocalRecord, uow: UnitOfWork) -> None:
         """Delete a local edit draft of a record deleted at the source.
 
-        ``delete_record`` (now or when the record was tombstoned locally) removes the draft
-        from the index but keeps it in the db, while ``delete_draft`` fails if the draft is
+        `delete_record` (now or when the record was tombstoned locally) removes the draft
+        from the index but keeps it in the db, while `delete_draft` fails if the draft is
         not indexed - so index it first (the ops run in order on commit).
         """
         if local.draft is not None:
@@ -619,9 +627,9 @@ class OAIServiceWriter(BaseWriter):
     def _revive(self, local: LocalRecord) -> None:
         """Bring a hard deleted record back with its original pid.
 
-        Hard delete sets ``model.json`` to ``None``, but the previous revision still has
-        the full json - reverting to it undeletes the record (``is_deleted`` is
-        ``json is None``). The harvested data is applied by the following update.
+        Hard delete sets `model.json` to `None`, but the previous revision still has
+        the full json - reverting to it undeletes the record (`is_deleted` is
+        `json is None`). The harvested data is applied by the following update.
         """
         record = cast("Record", local.record)
         pid = cast("PersistentIdentifier", local.deleted_pid)

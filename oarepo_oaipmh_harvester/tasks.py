@@ -3,22 +3,24 @@
 
 """Harvest Celery tasks and datastream construction.
 
-:func:`harvest_oaipmh_records` loads a harvester and builds an invenio-vocabularies
-datastream from it:
+[harvest_oaipmh_records][oarepo_oaipmh_harvester.tasks.harvest_oaipmh_records] loads a
+harvester and builds an invenio-vocabularies datastream from it:
 
-* reader - the harvester's ``loader`` (default ``oai-pmh``, the invenio-vocabularies
-  OAI-PMH reader), with ``base_url``, ``metadata_prefix``, ``set``, ``from_date``
-  (from ``since``, formatted to the granularity the server advertises in ``Identify``,
-  see :func:`format_oaipmh_datestamp`) and ``identifiers`` filled in unless given in the
-  loader options;
-* transformers and writers - the harvester's ``transformers`` / ``writers``.
+* reader - the harvester's `loader` (default `oai-pmh`, the invenio-vocabularies
+  OAI-PMH reader), with `base_url`, `metadata_prefix`, `set`, `from_date`
+  (from `since`, formatted to the granularity the server advertises in `Identify`,
+  see [format_oaipmh_datestamp][oarepo_oaipmh_harvester.tasks.format_oaipmh_datestamp])
+  and `identifiers` filled in unless given in the loader options;
+* transformers and writers - the harvester's `transformers` / `writers`.
 
-Each definition is a string ``name{options}`` where options are a JSON5 object
-(:func:`parse_config`); ``harvester_id`` is always added to the options. The names are
-looked up in ``VOCABULARIES_DATASTREAM_READERS`` / ``_TRANSFORMERS`` / ``_WRITERS``.
+Each definition is a string `name{options}` where options are a JSON5 object
+([parse_config][oarepo_oaipmh_harvester.tasks.parse_config]); `harvester_id` is always
+added to the options. The names are looked up in `VOCABULARIES_DATASTREAM_READERS` /
+`_TRANSFORMERS` / `_WRITERS`.
 
-:func:`run_all_harvesters` (job type :class:`RunAllHarvesters`) runs a full harvest of
-all harvesters.
+[run_all_harvesters][oarepo_oaipmh_harvester.tasks.run_all_harvesters] (job type
+[RunAllHarvesters][oarepo_oaipmh_harvester.tasks.RunAllHarvesters]) runs a full harvest
+of all harvesters.
 """
 
 from __future__ import annotations
@@ -62,11 +64,11 @@ def _oai_granularity(base_url: str) -> str | None:
 def format_oaipmh_datestamp(since: datetime | str, base_url: str) -> str:
     """Format `since` as an OAI-PMH datestamp matching the server granularity.
 
-    OAI-PMH repositories that advertise ``YYYY-MM-DD`` granularity (e.g. the
-    ASEP ARL server) reject any time component, while ``...+00:00`` offsets
-    produced by ``datetime.isoformat()`` are illegal in both granularities.
-    Seconds-granularity servers get ``YYYY-MM-DDThh:mm:ssZ`` (UTC), others a
-    bare ``YYYY-MM-DD``.
+    OAI-PMH repositories that advertise `YYYY-MM-DD` granularity (e.g. the
+    ASEP ARL server) reject any time component, while `...+00:00` offsets
+    produced by `datetime.isoformat()` are illegal in both granularities.
+    Seconds-granularity servers get `YYYY-MM-DDThh:mm:ssZ` (UTC), others a
+    bare `YYYY-MM-DD`.
     """
     if isinstance(since, str):
         import arrow

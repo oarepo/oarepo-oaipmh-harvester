@@ -156,7 +156,7 @@ class OAIPMHDetailView(OAIHarvesterPermissionsMixin, AdminResourceDetailView):
     }
 
 
-# the mixin is always combined with AdminFormView, which provides ``_schema_to_json``
+# the mixin is always combined with AdminFormView, which provides `_schema_to_json`
 _FormViewBase = AdminFormView if TYPE_CHECKING else object
 
 

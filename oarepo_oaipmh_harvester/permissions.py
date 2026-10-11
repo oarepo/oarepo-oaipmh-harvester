@@ -3,12 +3,14 @@
 
 """Permission policies and generators for harvesters and harvest records.
 
-* :class:`OAIHarvesterPermissionPolicy` - administrators manage harvesters; harvest
-  managers (:class:`HarvestManager`, user ids in the harvester's ``harvest_managers``)
-  may read a harvester and run it.
-* :class:`OAIRecordPermissionPolicy` - harvest records are written by the system only;
-  administrators and the managers of the record's harvester
-  (:class:`HarvestRecordManager`) may read them and re-harvest them.
+* [OAIHarvesterPermissionPolicy][oarepo_oaipmh_harvester.permissions.OAIHarvesterPermissionPolicy]
+  - administrators manage harvesters; harvest managers
+  ([HarvestManager][oarepo_oaipmh_harvester.permissions.HarvestManager], user ids in the
+  harvester's `harvest_managers`) may read a harvester and run it.
+* [OAIRecordPermissionPolicy][oarepo_oaipmh_harvester.permissions.OAIRecordPermissionPolicy]
+  - harvest records are written by the system only; administrators and the managers of the
+  record's harvester ([HarvestRecordManager][oarepo_oaipmh_harvester.permissions.HarvestRecordManager])
+  may read them and re-harvest them.
 
 Both manager generators also provide search query filters, so that managers only find
 their own harvesters / records.

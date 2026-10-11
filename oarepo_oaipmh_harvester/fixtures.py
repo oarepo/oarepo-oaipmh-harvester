@@ -1,17 +1,17 @@
 # SPDX-FileCopyrightText: 2026 CESNET z.s.p.o
 # SPDX-License-Identifier: MIT
 
-"""``oai_harvesters`` fixture - harvesters loaded from ``app_data/oai_harvesters.yaml``.
+"""`oai_harvesters` fixture - harvesters loaded from `app_data/oai_harvesters.yaml`.
 
-Registered via the ``oarepo.fixtures`` entry point. Each YAML entry uses the keys of the
-``invenio oai harvesters create`` command (``id``, ``name``, ``base-url``,
-``metadata-prefix``, ``setspec``, ``loader``, ``model``, ``transformer``, ``writer``,
-``harvest-manager``, ``comment``). Existing harvesters are updated.
+Registered via the `oarepo.fixtures` entry point. Each YAML entry uses the keys of the
+`invenio oai harvesters create` command (`id`, `name`, `base-url`,
+`metadata-prefix`, `setspec`, `loader`, `model`, `transformer`, `writer`,
+`harvest-manager`, `comment`). Existing harvesters are updated.
 
-When ``model`` is given and ``transformer`` / ``writer`` are not, the defaults are
-``oai-import{model:...}`` and ``oai-service{model:...}``, as in the command line.
+When `model` is given and `transformer` / `writer` are not, the defaults are
+`oai-import{model:...}` and `oai-service{model:...}`, as in the command line.
 
-``harvest-manager`` entries are e-mail addresses of existing users (or ``{"user": id}``
+`harvest-manager` entries are e-mail addresses of existing users (or `{"user": id}`
 dictionaries); they are stored as user ids.
 """
 

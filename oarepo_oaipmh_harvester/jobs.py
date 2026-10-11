@@ -4,12 +4,14 @@
 """invenio-jobs integration - one job type per harvester.
 
 invenio-jobs supports run parameters only, not job parameters, so a single job type can
-not be scheduled separately for different harvesters. :func:`register_oaipmh_job`
-therefore creates a subclass of :class:`OAIHarvestJob` with the id
-``harvest_oaipmh_records_<harvester id>`` for every harvester - when the harvester is
+not be scheduled separately for different harvesters.
+[register_oaipmh_job][oarepo_oaipmh_harvester.jobs.register_oaipmh_job] therefore creates
+a subclass of [OAIHarvestJob][oarepo_oaipmh_harvester.jobs.OAIHarvestJob] with the id
+`harvest_oaipmh_records_<harvester id>` for every harvester - when the harvester is
 created and for all stored harvesters at application start
-(:func:`register_current_harvesters`). invenio-jobs passes the start of the last
-successful run as ``since``, so scheduled runs are incremental.
+([register_current_harvesters][oarepo_oaipmh_harvester.jobs.register_current_harvesters]).
+invenio-jobs passes the start of the last successful run as `since`, so scheduled runs
+are incremental.
 """
 
 from __future__ import annotations

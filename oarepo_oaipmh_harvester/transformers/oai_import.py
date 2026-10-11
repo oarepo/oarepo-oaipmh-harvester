@@ -1,16 +1,16 @@
 # SPDX-FileCopyrightText: 2025-2026 CESNET z.s.p.o
 # SPDX-License-Identifier: MIT
 
-"""``oai-import`` transformer - converts harvested XML with the target model's import.
+"""`oai-import` transformer - converts harvested XML with the target model's import.
 
-The transformer takes the single child of the OAI ``<metadata>`` element and looks up an
-import of the target model whose ``oai_name`` equals ``(namespace, local name)`` of that
-element (imports are added to models with ``oarepo_model`` ``AddMetadataImport``). The
-import's deserializer gets the element itself (``deserialize_xml``) if it supports it,
-otherwise its string serialization (``deserialize``). Deleted OAI records pass through
-with ``record = None``.
+The transformer takes the single child of the OAI `<metadata>` element and looks up an
+import of the target model whose `oai_name` equals `(namespace, local name)` of that
+element (imports are added to models with `oarepo_model` `AddMetadataImport`). The
+import's deserializer gets the element itself (`deserialize_xml`) if it supports it,
+otherwise its string serialization (`deserialize`). Deleted OAI records pass through
+with `record = None`.
 
-Datastream configuration: ``oai-import{model:"<model name>"}``.
+Datastream configuration: `oai-import{model:"<model name>"}`.
 """
 
 from __future__ import annotations
@@ -43,8 +43,12 @@ class OAIImportTransformer(BaseTransformer):
     def apply(self, stream_entry: StreamEntry, *_args: Any, **_kwargs: Any) -> StreamEntry:
         """Apply the transformation to the entry.
 
-        :returns: A StreamEntry. The transformed entry.
-                  Raises TransformerError in case of errors.
+        Returns:
+            StreamEntry: The transformed entry.
+
+        Raises:
+            TransformerError: In case of errors.
+
         """
         if not isinstance(stream_entry.entry, dict) or not isinstance(
             stream_entry.entry["record"],
