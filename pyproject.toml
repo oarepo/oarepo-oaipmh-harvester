@@ -116,3 +116,9 @@ packages = ["oarepo_oaipmh_harvester"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["oarepo_oaipmh_harvester"]
+
+[tool.uv.build-backend]
+# Import name oarepo-cli derives the documented package from: the
+# distribution name (oarepo-oai-pmh-harvester) would normalize to
+# oarepo_oai_pmh_harvester, which is not the actual package.
+module-name = ["oarepo_oaipmh_harvester"]
