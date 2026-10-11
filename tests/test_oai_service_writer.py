@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 from invenio_access.permissions import system_identity
 from invenio_db import db
+from invenio_pidstore.models import PersistentIdentifier, PIDStatus
 from invenio_vocabularies.datastreams.datastreams import StreamEntry
 from oarepo_runtime import current_runtime
 
@@ -210,6 +211,8 @@ def test_harvest_revives_hard_deleted_rdm_record(
     assert service.draft_cls.model_cls.query.filter_by(id=record_id).count() == 0
 
     assert _harvest(writer, 2, record=_rdm_data(rdm_record_data, "Title v2")) == Operation.REVIVE
+    # model pid and oarepo-rdm global "recid" pid are both registered again
+    assert all(p.status == PIDStatus.REGISTERED for p in PersistentIdentifier.query.filter_by(pid_value=pid_value))
     read = service.read(system_identity, pid_value)
     assert read["metadata"]["title"] == "Title v2"
     assert read["parent"]["id"] == parent_id
@@ -314,3 +317,31 @@ def test_unchanged_harvest_overwrites_local_edit_draft(
     assert service.read(system_identity, pid_value)["metadata"]["title"] == "Title v1"
     assert LocalRecord.resolve(service, pid_value, with_drafts=True).draft is None
     assert _harvest(writer, 1, record=_rdm_data(rdm_record_data, "Title v1")) is None  # up to date now
+
+
+@pytest.mark.parametrize("published", [False, True], ids=["user_draft", "user_published"])
+def test_harvest_overwrites_user_record_with_same_external_pid(
+    app, db, search_clear, external_pid_test_model, location, harvester, rdm_record_data, published
+):
+    """User deposited a record with an external pid, the harvest brings the same pid later."""
+    writer = OAIServiceWriter("extpidtest", publish=True, harvester_id=harvester)
+    service = writer.service
+    pid_value = "ext-1"
+
+    service.create(system_identity, {**_rdm_data(rdm_record_data, "User title"), "id": pid_value})
+    if published:
+        service.publish(system_identity, pid_value)
+    db.session.commit()
+
+    expected_operation = Operation.UPDATE if published else Operation.UPDATE_DRAFT
+    assert _harvest(writer, 1, record={**_rdm_data(rdm_record_data, "Harvested title"), "id": pid_value}) == (
+        expected_operation
+    )
+
+    # harvested data overwrote the user's record, no new record was created
+    assert _oai_record(db).record_pid == pid_value
+    assert service.read(system_identity, pid_value)["metadata"]["title"] == "Harvested title"
+    # oarepo-rdm keeps a global "recid" pid next to the model pid - both must point to the same record
+    assert len({p.object_uuid for p in PersistentIdentifier.query.filter_by(pid_value=pid_value)}) == 1
+    assert service.record_cls.model_cls.query.count() == 1
+    assert LocalRecord.resolve(service, pid_value, with_drafts=True).draft is None

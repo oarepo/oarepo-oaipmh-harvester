@@ -11,15 +11,24 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 import pytest
+from external_pid import (
+    ExternalPIDComponent,
+    ExternalPIDField,
+    ExternalPIDFieldContextMixin,
+    ExternalPIDProvider,
+    NoPIDStatusCheckFieldMixin,
+)
 from flask import current_app
 from flask_resources.deserializers import DeserializerMixin
 from invenio_access.models import ActionUsers
 from invenio_access.permissions import system_identity
 from invenio_app.factory import create_app as _create_app
+from invenio_drafts_resources.records.api import DraftRecordIdProviderV2
+from invenio_records_resources.records.systemfields import PIDField
 from invenio_vocabularies.proxies import current_service as current_vocabularies_service
 from lxml import etree
 from oarepo_model.api import model
-from oarepo_model.customizations import AddMetadataImport
+from oarepo_model.customizations import AddMetadataImport, AddServiceComponent, PrependMixin, ReplaceBaseClass
 from oarepo_model.presets.records_resources import records_resources_preset
 from oarepo_rdm.model.presets import rdm_complete_preset
 
@@ -203,6 +212,22 @@ _rdm_test_model = model(
 )
 _rdm_test_model.register()
 
+# RDM model with an external pid taken from the record data (as the NMA datasets model)
+_external_pid_test_model = model(
+    "extpidtest",
+    presets=[rdm_complete_preset],
+    types=[{"Metadata": {"properties": {}}}],
+    metadata_type="Metadata",
+    customizations=[
+        AddServiceComponent(ExternalPIDComponent),
+        ReplaceBaseClass("PIDProvider", DraftRecordIdProviderV2, ExternalPIDProvider),
+        ReplaceBaseClass("PIDField", PIDField, ExternalPIDField),
+        PrependMixin("PIDFieldContext", ExternalPIDFieldContextMixin),
+        PrependMixin("Draft", NoPIDStatusCheckFieldMixin),
+    ],
+)
+_external_pid_test_model.register()
+
 
 @pytest.fixture(scope="session", autouse=True)
 def test_model():
@@ -212,6 +237,11 @@ def test_model():
 @pytest.fixture(scope="session", autouse=True)
 def rdm_test_model():
     return _rdm_test_model
+
+
+@pytest.fixture(scope="session", autouse=True)
+def external_pid_test_model():
+    return _external_pid_test_model
 
 
 @pytest.fixture(scope="module")
