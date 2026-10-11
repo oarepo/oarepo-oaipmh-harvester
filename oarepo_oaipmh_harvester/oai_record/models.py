@@ -43,10 +43,10 @@ class OAIHarvestedRecord(db.Model):
     Note that this is not the database ID but the PID value.
     """
 
-    datestamp = db.Column(db.DateTime, nullable=False)
+    datestamp = db.Column(db.UTCDateTime, nullable=False)
     """Datestamp of the record."""
 
-    harvested_at = db.Column(db.DateTime, nullable=False)
+    harvested_at = db.Column(db.UTCDateTime, nullable=False)
     """Time when the record was harvested."""
 
     deleted = db.Column(db.Boolean, default=False, nullable=False)

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2025 CESNET z.s.p.o.
+# Copyright (c) 2026 CESNET z.s.p.o.
 #
 # This file is a part of oarepo-oaipmh-harvester (see https://github.com/oarepo/oarepo-oaipmh-harvester).
 #
@@ -18,7 +18,13 @@ from invenio_vocabularies.datastreams.datastreams import StreamEntry
 from oarepo_runtime import current_runtime
 
 from oarepo_oaipmh_harvester.oai_record.models import OAIHarvestedRecord
-from oarepo_oaipmh_harvester.writers.oai_service import LocalRecord, LocalState, OAIServiceWriter, Operation
+from oarepo_oaipmh_harvester.writers.oai_service import (
+    LocalRecord,
+    LocalState,
+    OAIServiceWriter,
+    Operation,
+    _utc_datestamp,
+)
 
 
 def _entry(datestamp: dt.datetime, *, deleted: bool, record: dict | None = None) -> StreamEntry:
@@ -55,7 +61,7 @@ def test_existing_oai_record_gets_new_datestamp_and_deleted(app, db, search_clea
     writer.write(_entry(second, deleted=True))
 
     oai_record = db.session.query(OAIHarvestedRecord).filter_by(oai_identifier="oai:test:1").one()
-    assert oai_record.datestamp.replace(tzinfo=dt.UTC) == second
+    assert oai_record.datestamp == second
     assert oai_record.deleted is True
     assert oai_record.has_errors is False
 
@@ -212,3 +218,99 @@ def test_harvest_revives_hard_deleted_rdm_record(
 def test_rdm_model_requires_publish(app, rdm_test_model):
     with pytest.raises(ValueError, match="publish=True"):
         OAIServiceWriter("rdmtest", publish=False)
+
+
+def test_unchanged_harvest_still_wins_over_local_changes(
+    app, db, search_clear, rdm_test_model, location, harvester, rdm_record_data
+):
+    writer = OAIServiceWriter("rdmtest", publish=True, harvester_id=harvester)
+    service = writer.service
+
+    # live at the source, deleted locally - same datestamp is re-harvested, record restored
+    _harvest(writer, 1, record=_rdm_data(rdm_record_data, "Title v1"))
+    pid_value = _oai_record(db).record_pid
+    assert _harvest(writer, 1, record=_rdm_data(rdm_record_data, "Title v1")) is None  # up to date, skipped
+    service.delete_record(system_identity, pid_value, {"note": "local delete"})
+    assert _harvest(writer, 1, record=_rdm_data(rdm_record_data, "Title v1")) == Operation.RESTORE
+    assert LocalRecord.resolve(service, pid_value, with_drafts=True).state is LocalState.LIVE
+
+    # deleted at the source, restored locally (e.g. user moderation restore) - deleted again
+    _harvest(writer, 2, deleted=True)
+    assert _harvest(writer, 2, deleted=True) is None  # up to date, skipped
+    service.restore_record(system_identity, pid_value)
+    assert _harvest(writer, 2, deleted=True) == Operation.DELETE_RECORD
+    assert LocalRecord.resolve(service, pid_value, with_drafts=True).state is LocalState.TOMBSTONED
+
+
+@pytest.mark.parametrize(
+    ("datestamp", "expected"),
+    [
+        ("2025-01-02", dt.datetime(2025, 1, 2, tzinfo=dt.UTC)),
+        ("2025-01-02T03:04:05Z", dt.datetime(2025, 1, 2, 3, 4, 5, tzinfo=dt.UTC)),
+        ("2025-01-02T03:04:05+02:00", dt.datetime(2025, 1, 2, 1, 4, 5, tzinfo=dt.UTC)),
+        (dt.datetime(2025, 1, 2, 3, 4, 5), dt.datetime(2025, 1, 2, 3, 4, 5, tzinfo=dt.UTC)),  # noqa: DTZ001 naive input
+    ],
+)
+def test_utc_datestamp(datestamp, expected):
+    parsed = _utc_datestamp(datestamp)
+    assert parsed == expected
+    assert parsed.tzinfo is dt.UTC
+
+
+def _edit_locally(service, pid_value: str, rdm_record_data: dict) -> None:
+    """Create a local edit draft of a published record (not published)."""
+    service.edit(system_identity, pid_value)
+    service.update_draft(system_identity, pid_value, _rdm_data(rdm_record_data, "Local edit"))
+    db.session.commit()
+
+
+def test_source_deletion_removes_local_edit_draft(
+    app, db, search_clear, rdm_test_model, location, harvester, rdm_record_data
+):
+    writer = OAIServiceWriter("rdmtest", publish=True, harvester_id=harvester)
+    service = writer.service
+
+    _harvest(writer, 1, record=_rdm_data(rdm_record_data, "Title v1"))
+    pid_value = _oai_record(db).record_pid
+    _edit_locally(service, pid_value, rdm_record_data)
+    assert LocalRecord.resolve(service, pid_value, with_drafts=True).draft is not None
+
+    assert _harvest(writer, 2, deleted=True) == Operation.DELETE_RECORD
+    local = LocalRecord.resolve(service, pid_value, with_drafts=True)
+    assert local.state is LocalState.TOMBSTONED
+    assert local.draft is None
+
+
+def test_source_deletion_removes_draft_of_locally_tombstoned_record(
+    app, db, search_clear, rdm_test_model, location, harvester, rdm_record_data
+):
+    writer = OAIServiceWriter("rdmtest", publish=True, harvester_id=harvester)
+    service = writer.service
+
+    _harvest(writer, 1, record=_rdm_data(rdm_record_data, "Title v1"))
+    pid_value = _oai_record(db).record_pid
+    _edit_locally(service, pid_value, rdm_record_data)
+    service.delete_record(system_identity, pid_value, {"note": "local delete"})
+    db.session.commit()
+
+    assert _harvest(writer, 2, deleted=True) == Operation.DELETE_DRAFT
+    local = LocalRecord.resolve(service, pid_value, with_drafts=True)
+    assert local.state is LocalState.TOMBSTONED
+    assert local.draft is None
+    assert _harvest(writer, 2, deleted=True) is None  # up to date now
+
+
+def test_unchanged_harvest_overwrites_local_edit_draft(
+    app, db, search_clear, rdm_test_model, location, harvester, rdm_record_data
+):
+    writer = OAIServiceWriter("rdmtest", publish=True, harvester_id=harvester)
+    service = writer.service
+
+    _harvest(writer, 1, record=_rdm_data(rdm_record_data, "Title v1"))
+    pid_value = _oai_record(db).record_pid
+    _edit_locally(service, pid_value, rdm_record_data)
+
+    assert _harvest(writer, 1, record=_rdm_data(rdm_record_data, "Title v1")) == Operation.UPDATE
+    assert service.read(system_identity, pid_value)["metadata"]["title"] == "Title v1"
+    assert LocalRecord.resolve(service, pid_value, with_drafts=True).draft is None
+    assert _harvest(writer, 1, record=_rdm_data(rdm_record_data, "Title v1")) is None  # up to date now
