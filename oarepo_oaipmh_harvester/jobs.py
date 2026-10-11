@@ -6,7 +6,16 @@
 # oarepo-oaipmh-harvester is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
 #
-"""Jobs for OAI-PMH Harvester."""
+"""invenio-jobs integration - one job type per harvester.
+
+invenio-jobs supports run parameters only, not job parameters, so a single job type can
+not be scheduled separately for different harvesters. :func:`register_oaipmh_job`
+therefore creates a subclass of :class:`OAIHarvestJob` with the id
+``harvest_oaipmh_records_<harvester id>`` for every harvester - when the harvester is
+created and for all stored harvesters at application start
+(:func:`register_current_harvesters`). invenio-jobs passes the start of the last
+successful run as ``since``, so scheduled runs are incremental.
+"""
 
 from __future__ import annotations
 

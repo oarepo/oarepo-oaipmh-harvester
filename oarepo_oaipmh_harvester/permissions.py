@@ -6,14 +6,24 @@
 # oarepo-oaipmh-harvester is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
 #
-"""Permissions for OAI-PMH Harvester."""
+"""Permission policies and generators for harvesters and harvest records.
+
+* :class:`OAIHarvesterPermissionPolicy` - administrators manage harvesters; harvest
+  managers (:class:`HarvestManager`, user ids in the harvester's ``harvest_managers``)
+  may read a harvester and run it.
+* :class:`OAIRecordPermissionPolicy` - harvest records are written by the system only;
+  administrators and the managers of the record's harvester
+  (:class:`HarvestRecordManager`) may read them and re-harvest them.
+
+Both manager generators also provide search query filters, so that managers only find
+their own harvesters / records.
+"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, override
 
 from flask_principal import Need, UserNeed
-from invenio_access import action_factory
 from invenio_records_permissions import RecordPermissionPolicy
 from invenio_records_permissions.generators import (
     AnyUser,
@@ -21,10 +31,7 @@ from invenio_records_permissions.generators import (
     Generator,
     SystemProcess,
 )
-from oarepo_runtime.services.generators import (
-    ActionQueryFilterMixin,
-    AdministrationWithQueryFilter,
-)
+from oarepo_runtime.services.generators import AdministrationWithQueryFilter
 from opensearch_dsl.query import MatchNone, Term
 
 if TYPE_CHECKING:
@@ -51,19 +58,6 @@ class HarvestManager(Generator):
         if not identity or not identity.id:
             return MatchNone()
         return Term(**{"harvest_managers.user": identity.id})
-
-
-harvest_action = action_factory("oai-harvest-access")
-
-
-class HarvestAction(ActionQueryFilterMixin, Generator):
-    """Generator that matches people with harvest-access permission."""
-
-    access_action = harvest_action
-
-    @override
-    def needs(self, **kwargs: Any) -> Collection[Need]:
-        return [harvest_action]  # type: ignore[reportReturnType]
 
 
 class OAIHarvesterPermissionPolicy(RecordPermissionPolicy):

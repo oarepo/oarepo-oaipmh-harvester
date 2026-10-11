@@ -105,9 +105,6 @@ oarepo_oaipmh_harvester = "oarepo_oaipmh_harvester.ext:finalize_apps"
 [project.entry-points."invenio_base.finalize_app"]
 oarepo_oaipmh_harvester = "oarepo_oaipmh_harvester.ext:finalize_apps"
 
-[project.entry-points."invenio_access.actions"]
-harvest_action = "oarepo_oaipmh_harvester.permissions:harvest_action"
-
 [project.entry-points."flask.commands"]
 oai = "oarepo_oaipmh_harvester.cli:oai_cli"
 

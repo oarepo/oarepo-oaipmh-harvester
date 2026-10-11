@@ -69,3 +69,12 @@ def test_harvest_task(app, db, search_clear, test_model, test_service, location,
     current_oai_record_service.search(system_identity).to_dict()
     oai_results = current_oai_record_service.search(system_identity).to_dict()
     assert oai_results["hits"]["total"] == 2
+
+
+def test_start_harvest_via_service(app, db, search_clear, harvester, mocker):
+    from oarepo_oaipmh_harvester.proxies import current_oai_harvester_service
+
+    delay = mocker.patch("oarepo_oaipmh_harvester.tasks.harvest_oaipmh_records.delay")
+    current_oai_harvester_service.harvest(system_identity, harvester)
+    # the task takes keyword arguments only
+    delay.assert_called_once_with(harvester_id=harvester)
