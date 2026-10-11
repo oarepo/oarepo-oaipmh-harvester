@@ -17,6 +17,9 @@ from external_pid import (
     ExternalPIDFieldContextMixin,
     ExternalPIDProvider,
     NoPIDStatusCheckFieldMixin,
+    UpdatableRecordServiceMixin,
+    UpdateMetadataComponent,
+    UpdatePermissionPolicyMixin,
 )
 from flask import current_app
 from flask_resources.deserializers import DeserializerMixin
@@ -224,6 +227,9 @@ _external_pid_test_model = model(
         ReplaceBaseClass("PIDField", PIDField, ExternalPIDField),
         PrependMixin("PIDFieldContext", ExternalPIDFieldContextMixin),
         PrependMixin("Draft", NoPIDStatusCheckFieldMixin),
+        AddServiceComponent(UpdateMetadataComponent),
+        PrependMixin("RecordService", UpdatableRecordServiceMixin),
+        PrependMixin("PermissionPolicy", UpdatePermissionPolicyMixin),
     ],
 )
 _external_pid_test_model.register()

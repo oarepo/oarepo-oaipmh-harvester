@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2025 CESNET z.s.p.o.
+# Copyright (c) 2025-2026 CESNET z.s.p.o.
 #
 # This file is a part of oarepo-oaipmh-harvester (see https://github.com/oarepo/oarepo-oaipmh-harvester).
 #
@@ -90,7 +90,7 @@ class Operation(StrEnum):
     NOOP = "noop"
     CREATE = "create"
     UPDATE = "update"
-    """Update a live record (for draft services: edit, update draft, publish)."""
+    """Update a live record (for draft services: edit, update draft, publish - unless ``direct_update``)."""
     UPDATE_DRAFT = "update_draft"
     RESTORE = "restore"
     """Restore a tombstoned rdm record (unmarking it from purge if needed), then update it."""
@@ -205,15 +205,23 @@ class OAIServiceWriter(BaseWriter):
         harvester_id: str | None = None,
         pid_field: str = "id",
         publish: bool = True,
+        direct_update: bool = False,
         **kwargs: Any,
     ):
-        """Initialize the OAI service writer."""
+        """Initialize the OAI service writer.
+
+        :param publish: publish created / updated drafts (required for draft services)
+        :param direct_update: update published records via ``service.update`` instead of
+            edit - update draft - publish. Only for services that allow updating published
+            records (drafts services do not by default).
+        """
         self._model = model
         self._update_all = update_all
         self._harvester_id = harvester_id
         self._pid_field = pid_field
         self._identity = identity or system_identity
         self._publish = publish
+        self._direct_update = direct_update
 
         super().__init__(
             *args,
@@ -367,12 +375,12 @@ class OAIServiceWriter(BaseWriter):
                         x for err in written_data["errors"] for x in self._convert_to_oai_error(err)
                     ]
                     commit_transaction = False
-                elif self._publish and op_type in (
-                    Operation.CREATE,
-                    Operation.UPDATE,
-                    Operation.UPDATE_DRAFT,
-                    Operation.RESTORE,
-                    Operation.REVIVE,
+                elif self._publish and (
+                    op_type in (Operation.CREATE, Operation.UPDATE_DRAFT)
+                    or (
+                        # with direct update the published record is updated, no draft to publish
+                        not self._direct_update and op_type in (Operation.UPDATE, Operation.RESTORE, Operation.REVIVE)
+                    )
                 ):
                     draft_service = cast("DraftRecordService", self.service)
                     draft_service.publish(
@@ -528,15 +536,15 @@ class OAIServiceWriter(BaseWriter):
                     draft_service.update_draft(self._identity, pid_value, record_data, uow=uow).to_dict(),
                 )
             case Operation.UPDATE:
-                return self._update(record_data, pid_value, uow)
+                return self._update(record_data, local, uow)
             case Operation.RESTORE:
                 if local.record is not None and local.record.deletion_status == RecordDeletionStatusEnum.MARKED:
                     rdm_service.unmark_record_for_purge(self._identity, pid_value, uow=uow)
                 rdm_service.restore_record(self._identity, pid_value, uow=uow)
-                return self._update(record_data, pid_value, uow)
+                return self._update(record_data, local, uow)
             case Operation.REVIVE:
                 self._revive(local)
-                return self._update(record_data, pid_value, uow)
+                return self._update(record_data, local, uow)
             case Operation.DELETE:
                 self.service.delete(self._identity, pid_value, uow=uow)
                 self._delete_local_draft(local, uow)
@@ -583,10 +591,14 @@ class OAIServiceWriter(BaseWriter):
         db.session.add(pid)
         record.revert(last_revision.revision_id)
 
-    def _update(self, record_data: dict, pid_value: str, uow: UnitOfWork) -> dict:
+    def _update(self, record_data: dict, local: LocalRecord, uow: UnitOfWork) -> dict:
         """Update a live record; draft services do not allow direct update, so go through a draft."""
-        if not self._publish:
-            return cast("dict", self.service.update(self._identity, pid_value, record_data, uow=uow).to_dict())
+        pid_value = cast("str", local.pid_value)
+        if not self._publish or self._direct_update:
+            written = self.service.update(self._identity, pid_value, record_data, uow=uow).to_dict()
+            # a local edit draft would otherwise survive (and overwrite the harvested data when published)
+            self._delete_local_draft(local, uow)
+            return cast("dict", written)
         draft_service = cast("DraftRecordService", self.service)
         # edit returns the existing draft if there is one - it gets overwritten by the harvested data
         draft_service.edit(self._identity, pid_value, uow=uow)

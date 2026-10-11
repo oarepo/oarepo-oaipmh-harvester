@@ -345,3 +345,32 @@ def test_harvest_overwrites_user_record_with_same_external_pid(
     assert len({p.object_uuid for p in PersistentIdentifier.query.filter_by(pid_value=pid_value)}) == 1
     assert service.record_cls.model_cls.query.count() == 1
     assert LocalRecord.resolve(service, pid_value, with_drafts=True).draft is None
+
+
+def test_direct_update(app, db, search_clear, external_pid_test_model, location, harvester, rdm_record_data, mocker):
+    """direct_update=True updates the published record via service.update, without a draft round trip."""
+    writer = OAIServiceWriter("extpidtest", publish=True, direct_update=True, harvester_id=harvester)
+    service = writer.service
+    pid_value = "ext-1"
+
+    def record(title: str) -> dict:
+        # direct update (base records service) requires media_files - NMA transformers always send it
+        return {**_rdm_data(rdm_record_data, title), "id": pid_value, "media_files": {"enabled": False}}
+
+    assert _harvest(writer, 1, record=record("Title v1")) == Operation.CREATE
+    revision_id = service.read(system_identity, pid_value)["revision_id"]
+
+    _edit_locally(service, pid_value, rdm_record_data)
+    assert writer.service is service  # spies below must see the writer's calls
+    edit = mocker.spy(service, "edit")
+    publish = mocker.spy(service, "publish")
+    assert _harvest(writer, 2, record=record("Title v2")) == Operation.UPDATE
+    edit.assert_not_called()
+    publish.assert_not_called()
+
+    read = service.read(system_identity, pid_value)
+    assert read["metadata"]["title"] == "Title v2"
+    assert read["revision_id"] > revision_id
+    # the local edit draft does not survive the harvest
+    assert LocalRecord.resolve(service, pid_value, with_drafts=True).draft is None
+    assert _harvest(writer, 2, record=record("Title v2")) is None  # up to date

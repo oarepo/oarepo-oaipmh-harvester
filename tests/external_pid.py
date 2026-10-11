@@ -6,7 +6,10 @@
 # oarepo-oaipmh-harvester is free software; you can redistribute it and/or modify it
 # under the terms of the MIT License; see LICENSE file for more details.
 #
-"""External (data provided) record pid, as used in NMA (riv.records)."""
+"""NMA-like model setup: external (data provided) record pid and direct update of published records.
+
+Trimmed copies of ``riv.records`` and ``models.datasets`` classes from NMA.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +17,9 @@ from typing import TYPE_CHECKING, Any, override
 
 from invenio_drafts_resources.records import Draft
 from invenio_drafts_resources.records.api import DraftRecordIdProviderV2
+from invenio_drafts_resources.services.records import RecordService as DraftRecordService
 from invenio_pidstore.models import PIDStatus
+from invenio_records_permissions.generators import SystemProcess
 from invenio_records_resources.records.systemfields import PIDField
 from invenio_records_resources.records.systemfields.pid_statuscheck import PIDStatusCheckField
 from invenio_records_resources.services.records.components.base import ServiceComponent
@@ -91,3 +96,25 @@ class ExternalPIDComponent(ServiceComponent):
         """Create pid when the record is created."""
         record["id"] = data["id"]  # type: ignore[index]
         self.service.draft_cls.pid.create(record)  # type: ignore[attr-defined]
+
+
+class UpdateMetadataComponent(ServiceComponent):
+    """Set metadata on direct update of a published record (rdm components only do it for drafts)."""
+
+    def update(self, identity: Any, data: dict | None = None, record: Record | None = None, **kwargs: Any) -> None:  # noqa: ARG002
+        """Inject the metadata into the record."""
+        record.metadata = (data or {}).get("metadata", {})  # type: ignore[union-attr]
+
+
+class UpdatableRecordServiceMixin:
+    """Allow updating published records directly - draft services refuse ``update``."""
+
+    def update(self, identity: Any, id_: str, data: dict, *args: Any, **kwargs: Any) -> Any:
+        """Update the published record via the plain records service."""
+        return super(DraftRecordService, self).update(identity, id_, data, *args, **kwargs)  # type: ignore[misc]
+
+
+class UpdatePermissionPolicyMixin:
+    """Allow the system to update published records (rdm disables ``update`` completely)."""
+
+    can_update = (SystemProcess(),)
