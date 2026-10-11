@@ -7,7 +7,7 @@ name = "oarepo-oai-pmh-harvester"
 version = "9.2.0"
 description = 'OAIPMH harvester for Invenio repositories'
 readme = "README.md"
-requires-python = ">=3.13,<3.15"
+requires-python = ">=3.14,<3.15"
 license = "MIT"
 keywords = []
 authors = [
@@ -17,7 +17,6 @@ authors = [
 classifiers = [
   "Development Status :: 4 - Beta",
   "Programming Language :: Python",
-  "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
@@ -46,7 +45,8 @@ dev = [
 ]
 tests = [
     "pytest-oarepo",
-    "oarepo-model>=5.0.0,<6.0.0",
+    "oarepo-model>=6.0.0,<7.0.0",
+    "oarepo-rdm>=9.0.0,<10.0.0",
     "pytest-mock"
 ]
 oarepo14=[
