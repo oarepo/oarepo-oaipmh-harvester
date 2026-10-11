@@ -20,7 +20,7 @@ from sqlalchemy_utils.types import JSONType, UUIDType
 from oarepo_oaipmh_harvester.oai_harvester.models import OAIHarvester
 
 if TYPE_CHECKING:
-    import datetime
+    import datetime as dt
 
 
 class OAIHarvestedRecord(db.Model):
@@ -172,12 +172,12 @@ class OAIRecordAggregateModel(AggregateMetadata):
         return 1
 
     @property
-    def created(self) -> datetime.datetime:
+    def created(self) -> dt.datetime:
         """Return the creation date of the record."""
         return self.datestamp  # type: ignore[no-any-return]
 
     @property
-    def updated(self) -> datetime.datetime:
+    def updated(self) -> dt.datetime:
         """Return the last update date of the record."""
         return self.datestamp  # type: ignore[no-any-return]
 
