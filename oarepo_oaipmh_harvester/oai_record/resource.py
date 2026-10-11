@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, cast, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 import marshmallow as ma
 import yaml
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 def data_to_html_yaml(data: Any) -> str:
     """Convert data to HTML highlighted YAML."""
     yaml_str = yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
-    return highlight(yaml_str, YamlLexer(), HtmlFormatter(full=False))  # type: ignore[no-any-return]
+    return highlight(yaml_str, YamlLexer(), HtmlFormatter(full=False))
 
 
 def location_to_list(errors: list[Any] | None) -> list[Any]:
@@ -58,12 +58,12 @@ class AdministrationDetailJSONSerializer(JSONSerializer):
     def serialize_object(self, obj: Any) -> str:
         """Serialize a single object."""
         obj = self._convert_to_administration_detail(obj)
-        return super().serialize_object(obj)  # type: ignore[no-any-return]
+        return super().serialize_object(obj)
 
     @override
     def serialize_object_list(self, obj_list: dict[str, Any]) -> str:
         obj_list["hits"]["hits"] = [self._convert_to_administration_detail(obj) for obj in obj_list["hits"]["hits"]]
-        return super().serialize_object_list(obj_list)  # type: ignore[no-any-return]
+        return super().serialize_object_list(obj_list)
 
     def _convert_to_administration_detail(self, serialized_record: dict[str, Any]) -> dict[str, Any]:
         serialized_record = {**serialized_record}
@@ -113,11 +113,9 @@ class OAIRecordResourceConfig(RecordResourceConfig):
         "id": ma.fields.Str(),
     }
 
-    error_handlers: ClassVar[  # type: ignore[misc] # overriding with class var
-        dict[
-            type[HTTPException | BaseException] | int,
-            Callable[[Exception], Response],
-        ]
+    error_handlers: Mapping[
+        type[HTTPException | BaseException] | int,
+        Callable[[Exception], Response],
     ] = {
         **ErrorHandlersMixin.error_handlers,
     }

@@ -43,7 +43,7 @@ def oai_cli() -> None:
 
 @oai_cli.group("harvesters")
 def harvesters_cli() -> None:
-    """Management of OAI PMH harvesters."""  # noqa: D401
+    """Manage OAI PMH harvesters."""
 
 
 @harvesters_cli.command("list")
@@ -115,7 +115,7 @@ def list_harvesters(json_output: bool) -> None:
 
 
 @harvesters_cli.command("create")
-@click.option("--id", required=True, help="Harvester ID")
+@click.option("--id", "harvester_id", required=True, help="Harvester ID")
 @click.option("--name", required=True, help="Harvester name")
 @click.option("--base-url", required=True, help="OAI-PMH base URL")
 @click.option("--metadata-prefix", required=True, help="Metadata prefix (e.g., oai_dc)")
@@ -139,8 +139,8 @@ def list_harvesters(json_output: bool) -> None:
 )
 @click.option("--comment", default="", help="Comment")
 @with_appcontext
-def create_harvester(  # noqa: PLR0917,PLR0913  # many parameters
-    id: str,  # noqa: A002 # shadows built-in
+def create_harvester(  # noqa: PLR0913,PLR0917
+    harvester_id: str,
     name: str,
     base_url: str,
     metadata_prefix: str,
@@ -164,7 +164,7 @@ def create_harvester(  # noqa: PLR0917,PLR0913  # many parameters
             writers = [f'oai-service{{model:"{model}"}}']
 
     harvester_data = {
-        "id": id,
+        "id": harvester_id,
         "name": name,
         "base_url": base_url,
         "metadata_prefix": metadata_prefix,
@@ -182,7 +182,7 @@ def create_harvester(  # noqa: PLR0917,PLR0913  # many parameters
         current_oai_harvester_service.indexer.refresh()
 
         console = Console()
-        console.print(f"[green]✓[/green] Harvester '{name}' created successfully with ID: {id}")
+        console.print(f"[green]✓[/green] Harvester '{name}' created successfully with ID: {harvester_id}")
     except Exception as e:
         db.session.rollback()
         click.echo(f"Error creating harvester: {e}", err=True)
@@ -214,7 +214,7 @@ def create_harvester(  # noqa: PLR0917,PLR0913  # many parameters
 )
 @click.option("--comment", help="Comment")
 @with_appcontext
-def update_harvester(  # noqa: PLR0913,PLR0917  # many parameters
+def update_harvester(  # noqa PLR0913,PLR0917 too many arguments
     harvester_id: str,
     name: str | None,
     base_url: str | None,

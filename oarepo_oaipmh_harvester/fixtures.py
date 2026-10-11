@@ -71,7 +71,7 @@ class HarvestersFixture(FixtureMixin):
         try:
             try:
                 current_oai_harvester_service.create(system_identity, harvester_data)
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa BLE001 fallback is ok
                 db.session.rollback()
                 current_oai_harvester_service.update(system_identity, harvester_data["id"], harvester_data)
 

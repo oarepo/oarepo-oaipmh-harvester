@@ -36,8 +36,3 @@ class OAIHarvestedRecordSchema(BaseRecordSchema):
     """Transformed data."""
     run_id = fields.String(required=True)
     """The run ID of the record."""
-
-    class Meta:
-        """Meta class for OAIHarvestedRecordSchema."""
-
-        strict = True

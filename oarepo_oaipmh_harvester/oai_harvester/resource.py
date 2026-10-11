@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 def data_to_html_yaml(data: Any) -> str:
     """Convert data to HTML-formatted YAML string."""
     yaml_str = yaml.dump(data, default_flow_style=False, sort_keys=False)
-    return highlight(yaml_str, YamlLexer(), HtmlFormatter(full=False))  # type: ignore[no-any-return]
+    return highlight(yaml_str, YamlLexer(), HtmlFormatter(full=False))
 
 
 class AdministrationDetailJSONSerializer(JSONSerializer):
@@ -44,12 +44,12 @@ class AdministrationDetailJSONSerializer(JSONSerializer):
     @override
     def serialize_object(self, obj: Any) -> str:
         obj = self._convert_to_administration_detail(obj)
-        return super().serialize_object(obj)  # type: ignore[no-any-return]
+        return super().serialize_object(obj)
 
     @override
     def serialize_object_list(self, obj_list: list[Any]) -> str:
         obj_list = [self._convert_to_administration_detail(obj) for obj in obj_list]
-        return super().serialize_object_list(obj_list)  # type: ignore[no-any-return]
+        return super().serialize_object_list(obj_list)
 
     def _convert_to_administration_detail(self, serialized_harvester: dict[str, Any]) -> dict[str, Any]:
         serialized_harvester = {**serialized_harvester}
@@ -72,19 +72,16 @@ class OAIHarvesterResourceConfig(RecordResourceConfig, ConfiguratorMixin):
         "harvest": "/<pid_value>/start",
     }
 
-    @property
-    def response_handlers(self) -> Mapping[str, ResponseHandler]:  # type: ignore[override]
-        """Get the response handlers for this resource."""
-        return {
-            "application/json": ResponseHandler(
-                serializer=JSONSerializer(),
-                headers=etag_headers,
-            ),
-            "application/vnd.inveniordm.v1+json": ResponseHandler(
-                serializer=AdministrationDetailJSONSerializer(),
-                headers=etag_headers,
-            ),
-        }
+    response_handlers: Mapping[str, ResponseHandler] = {
+        "application/json": ResponseHandler(
+            serializer=JSONSerializer(),
+            headers=etag_headers,
+        ),
+        "application/vnd.inveniordm.v1+json": ResponseHandler(
+            serializer=AdministrationDetailJSONSerializer(),
+            headers=etag_headers,
+        ),
+    }
 
 
 class OAIHarvesterResource(RecordResource):

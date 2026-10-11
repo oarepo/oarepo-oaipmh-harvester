@@ -183,7 +183,7 @@ class LocalRecord:
             state = LocalState.DRAFT_ONLY
         return cls(state, pid_value, is_rdm, record, draft, deleted_pid)
 
-    def operation(self, oai_deleted: bool) -> Operation:  # noqa: PLR0911 one return per state
+    def operation(self, oai_deleted: bool) -> Operation:  # noqa PLR0911
         """Determine the operation that brings the local record to the harvested state.
 
         The harvest always wins - whatever happened to the record locally, the state
@@ -221,7 +221,7 @@ class OAIServiceWriter(BaseWriter):
     an OAIRecord model instance to keep track of the harvesting status.
     """
 
-    def __init__(  # noqa PLR0913 too many arguments
+    def __init__(  # noqa PLR0913,PLR0917
         self,
         model: str,
         *args: Any,
@@ -316,17 +316,17 @@ class OAIServiceWriter(BaseWriter):
             local.state,
         )
         written_data = None
+        validation_errors: list[dict] = []
         exception_raised = None
 
         try:
-            written_data = self._save_and_publish_record(
+            written_data, validation_errors = self._save_and_publish_record(
                 transformed_data,
                 local,
                 op_type,
-                stream_entry,
                 oai_identifier,
             )
-        except Exception as e:  # noqa: BLE001 to catch all possible errors
+        except Exception as e:  # noqa BLE001 ok to catch here
             # we can't know the state of the db connection, rollback is a safe bet
             db.session.rollback()
             exception_raised = e
@@ -342,10 +342,16 @@ class OAIServiceWriter(BaseWriter):
                 original_data,
                 transformed_data,
                 stream_entry,
+                validation_errors,
                 exception_raised,
                 written_data,
             )
 
+        # the datastream api expects error messages; structured errors are on the oai record
+        stream_entry.errors = [
+            *(stream_entry.errors or []),
+            *(f"{error.get('location', '')}: {error['message']}" for error in validation_errors),
+        ]
         stream_entry.entry = {
             "record": written_data,
             "oai_record": stream_entry.entry["oai_record"],
@@ -358,20 +364,20 @@ class OAIServiceWriter(BaseWriter):
         transformed_data: dict,
         local: LocalRecord,
         op_type: Operation,
-        stream_entry: StreamEntry,
         oai_identifier: str,
-    ) -> dict | None:
+    ) -> tuple[dict | None, list[dict]]:
         """Save and optionally publish a record within a unit of work.
 
         Args:
             transformed_data: The transformed record data to be saved.
             local: The local record (state, pid value) the operation is applied to.
             op_type: The operation type (create, update, delete, etc.).
-            stream_entry: The stream entry being processed.
             oai_identifier: The OAI identifier of the record.
 
         Returns:
             written_data: The data of the written record, or None if not applicable.
+            validation_errors: Errors reported by the service (``type``, ``location``,
+                ``message``); the transaction is rolled back if there are any.
 
         """
         # we use unit of work here to avoid side effects
@@ -389,6 +395,7 @@ class OAIServiceWriter(BaseWriter):
                 )
                 raise
             commit_transaction = True
+            validation_errors: list[dict] = []
             if written_data:
                 # ensure the written data is also transformed (e.g. to resolve lazy strings)
                 written_data = json.loads(json.dumps(written_data, default=str))
@@ -402,9 +409,7 @@ class OAIServiceWriter(BaseWriter):
                 if written_data.get("errors"):
                     # the service reported errors during creation/update
 
-                    stream_entry.errors = [  # type: ignore[reportAttributeAccessIssue]
-                        x for err in written_data["errors"] for x in self._convert_to_oai_error(err)
-                    ]
+                    validation_errors = [x for err in written_data["errors"] for x in self._convert_to_oai_error(err)]
                     commit_transaction = False
                 elif self._publish and (
                     op_type in (Operation.CREATE, Operation.UPDATE_DRAFT)
@@ -423,11 +428,11 @@ class OAIServiceWriter(BaseWriter):
                 uow.commit()
             else:
                 uow.rollback()
-            return written_data
+            return written_data, validation_errors
 
     def _get_oai_record(self, oai_identifier: str) -> OAIHarvestedRecord | None:
         """Get the OAIHarvestedRecord instance by its OAI identifier."""
-        return db.session.query(OAIHarvestedRecord).filter_by(oai_identifier=oai_identifier).one_or_none()  # type: ignore[no-any-return]
+        return db.session.query(OAIHarvestedRecord).filter_by(oai_identifier=oai_identifier).one_or_none()
 
     def _check_up_to_date(
         self,
@@ -467,7 +472,7 @@ class OAIServiceWriter(BaseWriter):
             try:
                 fetched_record = self.service.read(system_identity, oai_record.record_pid)
                 stream_entry.entry["record"] = fetched_record.to_dict()
-            except Exception:  # noqa: BLE001 to catch all possible errors
+            except Exception:  # noqa BLE001 ok to catch here
                 current_app.logger.warning(
                     "Failed to read existing record %s for OAI identifier %s. Re-writing the record.",
                     oai_record.record_pid,
@@ -485,10 +490,10 @@ class OAIServiceWriter(BaseWriter):
         pid_type = getattr(pid_field, "_pid_type", None) if pid_field else None
         if get_pid_value_from_record and pid_type:
             # try to get pid value from transformed data
-            return get_pid_value_from_record(record_data)  # type: ignore[no-any-return]
+            return get_pid_value_from_record(record_data)
         return None
 
-    def _store_oai_record(  # noqa PLR0913 too many arguments
+    def _store_oai_record(  # noqa PLR0913,PLR0917
         self,
         oai_record: OAIHarvestedRecord | None,
         oai_identifier: str,
@@ -498,9 +503,10 @@ class OAIServiceWriter(BaseWriter):
         original_data: dict,
         transformed_data: dict | None,
         stream_entry: StreamEntry,
+        validation_errors: list[dict],
         exception_raised: Exception | None,
         written_data: dict | None,
-    ):
+    ) -> None:
         """Create or update the OAIHarvestedRecord instance."""
         if not oai_record:
             oai_record = OAIHarvestedRecord(
@@ -512,6 +518,7 @@ class OAIServiceWriter(BaseWriter):
         # store errors and warnings
         # build the list before assigning - in-place append on a JSON column is not persisted
         errors = [self._convert_stream_error(e) for e in (stream_entry.errors or [])]
+        errors.extend(validation_errors)
         if exception_raised is not None:
             errors.append(self._convert_exception_to_error_dict(exception_raised))
         if stream_entry.exc:
@@ -538,7 +545,7 @@ class OAIServiceWriter(BaseWriter):
 
         current_oai_record_service.indexer.bulk_index([oai_record.oai_identifier])
 
-    def _write(  # noqa: C901, PLR0911 one branch per operation
+    def _write(
         self,
         record_data: dict,
         local: LocalRecord,
@@ -546,53 +553,56 @@ class OAIServiceWriter(BaseWriter):
         oai_identifier: str,
         uow: UnitOfWork,
     ) -> dict | None:
-        """Write the record data using the service."""
-        if op_type is Operation.NOOP:
-            return None
-        if op_type is Operation.CREATE:
-            return cast(
-                "dict",
-                self.service.create(self._identity, record_data, uow=uow).to_dict(),
-            )
-        pid_value = local.pid_value
-        if pid_value is None:
-            raise ValueError(f"pid_value must be provided for {op_type} operation")
+        """Write the record data using the service.
 
-        draft_service = cast("DraftRecordService", self.service)
-        rdm_service = cast("RDMRecordService", self.service)
+        Operations other than ``NOOP`` and ``CREATE`` always have a pid value - a local
+        record without a pid is classified as ``ABSENT`` (see :meth:`LocalRecord.resolve`).
+        """
         match op_type:
+            case Operation.NOOP:
+                return None
+            case Operation.CREATE:
+                return cast("dict", self.service.create(self._identity, record_data, uow=uow).to_dict())
             case Operation.UPDATE_DRAFT:
+                draft_service = cast("DraftRecordService", self.service)
                 return cast(
                     "dict",
-                    draft_service.update_draft(self._identity, pid_value, record_data, uow=uow).to_dict(),
+                    draft_service.update_draft(
+                        self._identity, cast("str", local.pid_value), record_data, uow=uow
+                    ).to_dict(),
                 )
-            case Operation.UPDATE:
+            case Operation.UPDATE | Operation.RESTORE | Operation.REVIVE:
+                self._bring_back(local, op_type, uow)
                 return self._update(record_data, local, uow)
-            case Operation.RESTORE:
-                if getattr(local.record, "deletion_status", None) == RecordDeletionStatusEnum.MARKED:
-                    rdm_service.unmark_record_for_purge(self._identity, pid_value, uow=uow)
-                rdm_service.restore_record(self._identity, pid_value, uow=uow)
-                return self._update(record_data, local, uow)
-            case Operation.REVIVE:
-                self._revive(local)
-                return self._update(record_data, local, uow)
-            case Operation.DELETE:
-                self.service.delete(self._identity, pid_value, uow=uow)
-                self._delete_local_draft(local, uow)
-                return None
-            case Operation.DELETE_RECORD:
-                rdm_service.delete_record(
-                    self._identity,
-                    pid_value,
-                    {"note": f"Deleted at the OAI-PMH source ({oai_identifier})", "is_visible": True},
-                    uow=uow,
-                )
-                self._delete_local_draft(local, uow)
-                return None
-            case Operation.DELETE_DRAFT:
-                self._delete_local_draft(local, uow)
+            case Operation.DELETE | Operation.DELETE_RECORD | Operation.DELETE_DRAFT:
+                self._delete(local, op_type, oai_identifier, uow)
                 return None
         raise ValueError(f"Unknown operation type: {op_type}")
+
+    def _bring_back(self, local: LocalRecord, op_type: Operation, uow: UnitOfWork) -> None:
+        """Make a locally deleted record live again before it is updated (no-op for ``UPDATE``)."""
+        pid_value = cast("str", local.pid_value)
+        if op_type is Operation.RESTORE:
+            rdm_service = cast("RDMRecordService", self.service)
+            if getattr(local.record, "deletion_status", None) == RecordDeletionStatusEnum.MARKED:
+                rdm_service.unmark_record_for_purge(self._identity, pid_value, uow=uow)
+            rdm_service.restore_record(self._identity, pid_value, uow=uow)
+        elif op_type is Operation.REVIVE:
+            self._revive(local)
+
+    def _delete(self, local: LocalRecord, op_type: Operation, oai_identifier: str, uow: UnitOfWork) -> None:
+        """Delete the local record (``DELETE`` / ``DELETE_RECORD``) and its local draft."""
+        pid_value = cast("str", local.pid_value)
+        if op_type is Operation.DELETE:
+            self.service.delete(self._identity, pid_value, uow=uow)
+        elif op_type is Operation.DELETE_RECORD:
+            cast("RDMRecordService", self.service).delete_record(
+                self._identity,
+                pid_value,
+                {"note": f"Deleted at the OAI-PMH source ({oai_identifier})", "is_visible": True},
+                uow=uow,
+            )
+        self._delete_local_draft(local, uow)
 
     def _delete_local_draft(self, local: LocalRecord, uow: UnitOfWork) -> None:
         """Delete a local edit draft of a record deleted at the source.

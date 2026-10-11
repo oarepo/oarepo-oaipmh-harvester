@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, cast, override
 
 from flask import current_app
 from invenio_db import db
@@ -25,6 +25,14 @@ from .models import OAIHarvester, OAIHarvesterAggregateModel
 
 if TYPE_CHECKING:
     from uuid import UUID
+
+    from flask import Flask
+    from werkzeug.local import LocalProxy
+
+
+def _current_app_object() -> Flask:
+    """Return the real application object behind the ``current_app`` proxy (signal sender)."""
+    return cast("LocalProxy[Flask]", current_app)._get_current_object()  # noqa: SLF001
 
 
 class HarvesterDumper(SearchDumper):
@@ -49,9 +57,9 @@ class HarvesterDumper(SearchDumper):
 class OAIHarvesterAggregate(BaseAggregate):
     """An aggregate of information about a user."""
 
-    model: OAIHarvesterAggregateModel
+    model: OAIHarvesterAggregateModel  # ty: ignore[invalid-attribute-override] monkeytype
 
-    model_cls = OAIHarvesterAggregateModel  # type: ignore[reportAssignmentType]
+    model_cls = OAIHarvesterAggregateModel  # ty: ignore[invalid-assignment] monkeytype
     """The model class for the request."""
 
     dumper = HarvesterDumper()
@@ -62,7 +70,7 @@ class OAIHarvesterAggregate(BaseAggregate):
     )
     """The search engine index to use."""
 
-    id = ModelField("id", dump_type=str)  # type: ignore[reportAssignmentType]
+    id = ModelField("id", dump_type=str)
     """The code of the harvester."""
 
     base_url = ModelField("base_url", dump_type=str)
@@ -104,7 +112,7 @@ class OAIHarvesterAggregate(BaseAggregate):
         with db.session.begin_nested():
             record = OAIHarvester(**data)
             db.session.add(record)
-            return cls.from_model(record)  # type: ignore[no-any-return]
+            return cls.from_model(record)
 
     @override
     def delete(self, force: bool = False) -> OAIHarvesterAggregate:
@@ -115,7 +123,7 @@ class OAIHarvesterAggregate(BaseAggregate):
         with db.session.begin_nested():
             if self.send_signals:
                 before_record_delete.send(
-                    current_app._get_current_object(),  # type: ignore[attr-defined] # noqa SLF001
+                    _current_app_object(),
                     record=self,
                 )
 
@@ -128,7 +136,7 @@ class OAIHarvesterAggregate(BaseAggregate):
 
         if self.send_signals:
             after_record_delete.send(
-                current_app._get_current_object(),  # type: ignore[attr-defined] # noqa SLF001
+                _current_app_object(),
                 record=self,
             )
 
@@ -139,10 +147,10 @@ class OAIHarvesterAggregate(BaseAggregate):
         return self
 
     @classmethod
-    def get_record(cls, _id: str) -> OAIHarvesterAggregate:  # type: ignore[reportIncompatibleMethodOverride]
-        """Get the user via the specified ID."""
+    def get_record(cls, id_: UUID | str, with_deleted: bool = False) -> OAIHarvesterAggregate:  # noqa: ARG003 interface compatibility
+        """Get the harvester via the specified ID (harvesters are never soft deleted)."""
         with db.session.no_autoflush:
-            record = OAIHarvester.query.get(_id)
+            record = OAIHarvester.query.get(str(id_))
             if record is None:
-                raise PIDDoesNotExistError(cls.__name__, _id)
-            return cls.from_model(record)  # type: ignore[no-any-return]
+                raise PIDDoesNotExistError(cls.__name__, str(id_))
+            return cls.from_model(record)

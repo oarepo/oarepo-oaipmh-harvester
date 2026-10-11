@@ -39,7 +39,7 @@ def oai_record_permissions_decorator[**P, R_co](
             for manager in md.harvest_managers or []:
                 if "user" in manager:
                     manager_needs.add(UserNeed(manager["user"]))
-        oai_record_permission = Permission(administration_access_action, *manager_needs)  # type: ignore[reportArgumentType]
+        oai_record_permission = Permission(administration_access_action, *manager_needs)
 
         return cast(
             "R_co",

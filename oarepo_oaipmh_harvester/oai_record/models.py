@@ -151,7 +151,7 @@ class OAIRecordAggregateModel(AggregateMetadata):
 
     @property
     @override
-    def model_obj(self) -> OAIHarvestedRecord:  # type: ignore[reportIncompatibleMethodOverride]
+    def model_obj(self) -> OAIHarvestedRecord:
         """The actual model object behind this user aggregate."""
         if self._model_obj is None:
             id_ = (self._data or {}).get("id")
@@ -169,14 +169,14 @@ class OAIRecordAggregateModel(AggregateMetadata):
     @property
     def created(self) -> dt.datetime:
         """Return the creation date of the record."""
-        return self.datestamp  # type: ignore[no-any-return]
+        return self.datestamp
 
     @property
     def updated(self) -> dt.datetime:
         """Return the last update date of the record."""
-        return self.datestamp  # type: ignore[no-any-return]
+        return self.datestamp
 
     @property
     def id(self) -> str:
         """Return the ID of the record."""
-        return self.oai_identifier  # type: ignore[no-any-return]
+        return self.oai_identifier

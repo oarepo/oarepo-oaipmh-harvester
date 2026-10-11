@@ -68,7 +68,7 @@ class OAIHarvesterSearchOptions(SearchOptions, SearchOptionsMixin):
         "default_max_results": 10000,
     }
 
-    suggest_parser_cls = SuggestQueryParser.factory(  # type: ignore[assignment]  # passing partial instead of class
+    suggest_parser_cls = SuggestQueryParser.factory(
         fields=["comment^1", "name^2", "id^3"],
         type="most_fields",
         fuzziness="AUTO",
@@ -99,10 +99,10 @@ class RecordLink(Link):
     @staticmethod
     def vars(
         record: OAIHarvesterAggregate,
-        vars: dict[str, Any],  # noqa ARG002
+        link_vars: dict[str, Any],
     ) -> None:
         """Variables for the URI template."""
-        vars.update({"id": record.id})
+        link_vars.update({"id": record.id})
 
 
 class OAIHarvesterServiceConfig(RecordServiceConfig, ConfiguratorMixin):
@@ -319,6 +319,6 @@ class OAIHarvesterService(RecordService):
         from ..tasks import harvest_oaipmh_records
 
         # Fire-and-forget: we do not need the result of the Celery task here.
-        harvest_oaipmh_records.delay(harvester_id=oai_harvester.id)  # type: ignore[reportFunctionMemberAccess]
+        harvest_oaipmh_records.delay(harvester_id=oai_harvester.id)
 
         return self.result_item(self, identity, oai_harvester, links_tpl=self.links_item_tpl)

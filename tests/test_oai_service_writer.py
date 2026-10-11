@@ -246,7 +246,10 @@ def test_unchanged_harvest_still_wins_over_local_changes(
         ("2025-01-02", dt.datetime(2025, 1, 2, tzinfo=dt.UTC)),
         ("2025-01-02T03:04:05Z", dt.datetime(2025, 1, 2, 3, 4, 5, tzinfo=dt.UTC)),
         ("2025-01-02T03:04:05+02:00", dt.datetime(2025, 1, 2, 1, 4, 5, tzinfo=dt.UTC)),
-        (dt.datetime(2025, 1, 2, 3, 4, 5), dt.datetime(2025, 1, 2, 3, 4, 5, tzinfo=dt.UTC)),  # noqa: DTZ001 naive input
+        (
+            dt.datetime(2025, 1, 2, 3, 4, 5),  # noqa DTZ001 intended without the timezone
+            dt.datetime(2025, 1, 2, 3, 4, 5, tzinfo=dt.UTC),
+        ),
     ],
 )
 def test_utc_datestamp(datestamp, expected):

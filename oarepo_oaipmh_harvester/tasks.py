@@ -79,8 +79,8 @@ def format_oaipmh_datestamp(since: datetime | str, base_url: str) -> str:
         since_dt = since_dt.astimezone()  # interpret naive input as local time
     since_dt = since_dt.astimezone(UTC)
     if _oai_granularity(base_url) == _SECONDS_GRANULARITY:
-        return cast("str", since_dt.strftime("%Y-%m-%dT%H:%M:%SZ"))
-    return cast("str", since_dt.date().isoformat())
+        return since_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return since_dt.date().isoformat()
 
 
 @shared_task

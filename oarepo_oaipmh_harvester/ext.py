@@ -105,7 +105,7 @@ class OARepoOAIHarvesterExt:
     @cached_property
     def oai_record_service_config(self) -> OAIRecordServiceConfig:
         """Get the OAI record service config."""
-        config_cls = obj_or_import_string(  # type: ignore[no-any-return]
+        config_cls = obj_or_import_string(
             self.app.config.get(
                 "OAI_RECORD_SERVICE_CONFIG",
                 "oarepo_oaipmh_harvester.oai_record.service:OAIRecordServiceConfig",
@@ -120,7 +120,7 @@ class OARepoOAIHarvesterExt:
     @cached_property
     def oai_record_service(self) -> OAIRecordService:
         """Get the OAI record service."""
-        return obj_or_import_string(  # type: ignore[no-any-return]
+        return obj_or_import_string(
             self.app.config.get(
                 "OAI_RECORD_SERVICE",
                 "oarepo_oaipmh_harvester.oai_record.service:OAIRecordService",
@@ -130,7 +130,7 @@ class OARepoOAIHarvesterExt:
     @cached_property
     def oai_record_resource_config(self) -> OAIRecordResourceConfig:
         """Get the OAI record resource config."""
-        return obj_or_import_string(  # type: ignore[no-any-return]
+        return obj_or_import_string(
             self.app.config.get(
                 "OAI_RECORD_RESOURCE_CONFIG",
                 "oarepo_oaipmh_harvester.oai_record.resource:OAIRecordResourceConfig",
@@ -140,7 +140,7 @@ class OARepoOAIHarvesterExt:
     @cached_property
     def oai_record_resource(self) -> OAIRecordResource:
         """Get the OAI record resource."""
-        resource_cls = obj_or_import_string(  # type: ignore[no-any-return]
+        resource_cls = obj_or_import_string(
             self.app.config.get(
                 "OAI_RECORD_RESOURCE",
                 "oarepo_oaipmh_harvester.oai_record.resource:OAIRecordResource",
@@ -158,7 +158,7 @@ class OARepoOAIHarvesterExt:
     @cached_property
     def oai_harvester_service_config(self) -> OAIHarvesterServiceConfig:
         """Get the OAI harvester service config."""
-        config_cls = obj_or_import_string(  # type: ignore[no-any-return]
+        config_cls = obj_or_import_string(
             self.app.config.get(
                 "OAI_HARVESTER_SERVICE_CONFIG",
                 "oarepo_oaipmh_harvester.oai_harvester.service:OAIHarvesterServiceConfig",
@@ -173,7 +173,7 @@ class OARepoOAIHarvesterExt:
     @cached_property
     def oai_harvester_service(self) -> OAIHarvesterService:
         """Get the OAI harvester service."""
-        service_cls = obj_or_import_string(  # type: ignore[no-any-return]
+        service_cls = obj_or_import_string(
             self.app.config.get(
                 "OAI_HARVESTER_SERVICE",
                 "oarepo_oaipmh_harvester.oai_harvester.service:OAIHarvesterService",
@@ -188,7 +188,7 @@ class OARepoOAIHarvesterExt:
     @cached_property
     def oai_harvester_resource_config(self) -> OAIHarvesterResourceConfig:
         """Get the OAI harvester resource config."""
-        config_cls = obj_or_import_string(  # type: ignore[no-any-return]
+        config_cls = obj_or_import_string(
             self.app.config.get(
                 "OAI_HARVESTER_RESOURCE_CONFIG",
                 "oarepo_oaipmh_harvester.oai_harvester.resource:OAIHarvesterResourceConfig",
@@ -203,7 +203,7 @@ class OARepoOAIHarvesterExt:
     @cached_property
     def oai_harvester_resource(self) -> OAIHarvesterResource:
         """Get the OAI harvester resource."""
-        resource_cls = obj_or_import_string(  # type: ignore[no-any-return]
+        resource_cls = obj_or_import_string(
             self.app.config.get(
                 "OAI_HARVESTER_RESOURCE",
                 "oarepo_oaipmh_harvester.oai_harvester.resource:OAIHarvesterResource",

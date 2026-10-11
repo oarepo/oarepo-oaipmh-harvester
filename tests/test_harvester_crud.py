@@ -49,9 +49,7 @@ def test_harvester_crud(db, app, search, search_clear, user_with_administration_
 
     # use http client to read the harvester
     # we need to merge the user as expunge_all detached it and client depends on it
-    user_with_administration_rights._user = db.session.merge(  # noqa: SLF001
-        user_with_administration_rights.user
-    )
+    user_with_administration_rights._user = db.session.merge(user_with_administration_rights.user)
     user_with_administration_rights.api_login(client)
     response = client.get(f"/api/oai/harvest/harvesters/{harvester.id}")
     assert response.status_code == 200

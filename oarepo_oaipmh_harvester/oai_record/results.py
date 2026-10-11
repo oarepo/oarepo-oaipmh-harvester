@@ -25,7 +25,7 @@ class OAIRecordItem(RecordItem):
 
     _data: dict | None
 
-    def __init__(  # noqa: PLR0913,PLR0917 # too many arguments
+    def __init__(  # noqa PLR0913,PLR0917
         self,
         service: OAIRecordService,
         identity: Identity,
@@ -57,7 +57,7 @@ class OAIRecordItem(RecordItem):
     def links(self) -> dict[str, str]:
         """Get links for this result item."""
         if self._links_tpl:
-            return self._links_tpl.expand(self._identity, self._oai_record)  # type: ignore[no-any-return]
+            return self._links_tpl.expand(self._identity, self._oai_record)
         return {}
 
     @property
