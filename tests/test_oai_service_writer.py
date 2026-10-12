@@ -430,3 +430,17 @@ def test_harvest_unknown_community_is_an_error(
 def test_community_requires_rdm_model(app, test_model):
     with pytest.raises(ValueError, match="communities"):
         OAIServiceWriter("test", publish=False, community="c")
+
+
+def test_files_disabled_when_not_in_record(app, db, search_clear, rdm_test_model, location, harvester, rdm_record_data):
+    """Harvested metadata without a files section are published as metadata-only records."""
+    writer = OAIServiceWriter("rdmtest", publish=True, harvester_id=harvester)
+    record = {k: v for k, v in rdm_record_data.items() if k != "files"}
+
+    assert _harvest(writer, 1, record=record) == Operation.CREATE
+    read = writer.service.read(system_identity, _oai_record(db).record_pid).to_dict()
+    assert read["files"]["enabled"] is False
+    if current_runtime.models["rdmtest"].media_file_service is not None:
+        assert read["media_files"]["enabled"] is False
+    # stored as produced by the transformer
+    assert "files" not in _oai_record(db).transformed_data

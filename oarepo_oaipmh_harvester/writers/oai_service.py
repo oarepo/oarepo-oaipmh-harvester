@@ -41,6 +41,10 @@ update draft - publish unless `direct_update` is set. Records of rdm services ar
 with `delete_record` (tombstone with a note about the deletion at the source), other
 services with `delete`.
 
+Records whose data have no `files` / `media_files` section are written with
+`{"enabled": False}` there (for the sections the model supports) - harvested metadata
+do not bring files.
+
 Written records are added to the `community` writer option (slug or id) and to the
 communities listed by the transformer in `parent.communities.ids` of the transformed data.
 They are added directly (rdm `bulk_add`), without a community inclusion request; communities
@@ -420,6 +424,7 @@ class OAIServiceWriter(BaseWriter):
             transformed_data = json.loads(json.dumps(transformed_data, default=str))
             # parent communities are not writable via the service, they are added after publishing
             communities = self._pop_communities(transformed_data)
+            self._add_files_defaults(transformed_data)
             try:
                 written_data = self._write(transformed_data, local, op_type, oai_identifier, uow)
             except Exception:
@@ -466,6 +471,21 @@ class OAIServiceWriter(BaseWriter):
             else:
                 uow.rollback()
             return written_data, validation_errors
+
+    def _add_files_defaults(self, record_data: dict | None) -> None:
+        """Disable files / media files of records whose data do not mention them.
+
+        Only for the sections the model supports - a model without media files would reject
+        the `media_files` key.
+        """
+        if record_data is None:
+            # deleted at the source
+            return
+        model = current_runtime.models[self._model]
+        if model.file_service is not None:
+            record_data.setdefault("files", {"enabled": False})
+        if model.media_file_service is not None:
+            record_data.setdefault("media_files", {"enabled": False})
 
     def _pop_communities(self, record_data: dict | None) -> list[str]:
         """Remove `parent.communities` from the record data, return the writer's and the listed communities."""
