@@ -16,6 +16,7 @@ from flask_resources import (
     route,
 )
 from flask_resources.serializers.json import JSONSerializer
+from invenio_accounts.models import User
 from invenio_records_resources.resources import RecordResource, RecordResourceConfig
 from invenio_records_resources.resources.records.headers import etag_headers
 from invenio_records_resources.resources.records.resource import (
@@ -24,6 +25,7 @@ from invenio_records_resources.resources.records.resource import (
 )
 from invenio_records_resources.resources.records.utils import search_preference
 from invenio_records_resources.services.base.config import ConfiguratorMixin
+from markupsafe import escape
 from pygments import highlight
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import YamlLexer
@@ -36,6 +38,12 @@ def data_to_html_yaml(data: Any) -> str:
     """Convert data to HTML-formatted YAML string."""
     yaml_str = yaml.dump(data, default_flow_style=False, sort_keys=False)
     return highlight(yaml_str, YamlLexer(), HtmlFormatter(full=False))
+
+
+def _manager_emails(serialized_harvester: dict[str, Any]) -> list[str]:
+    """Return the e-mail addresses of the harvester's managers."""
+    user_ids = [manager["user"] for manager in serialized_harvester.get("harvest_managers") or []]
+    return [user.email for user in User.query.filter(User.id.in_(user_ids))] if user_ids else []
 
 
 class AdministrationDetailJSONSerializer(JSONSerializer):
@@ -57,8 +65,35 @@ class AdministrationDetailJSONSerializer(JSONSerializer):
         serialized_harvester = {**serialized_harvester}
         serialized_harvester["transformers"] = data_to_html_yaml(serialized_harvester["transformers"])
         serialized_harvester["writers"] = data_to_html_yaml(serialized_harvester["writers"])
+        # rendered as html by the detail view
+        serialized_harvester["harvest_managers"] = "<br>".join(
+            str(escape(email)) for email in _manager_emails(serialized_harvester)
+        )
         # TODO: link to jobs here
         return serialized_harvester
+
+
+class AdministrationEditJSONSerializer(JSONSerializer):
+    """JSON serializer for the administration edit form.
+
+    The form edits `transformers`, `writers` and `harvest_managers` in textareas - they are
+    serialized as newline separated text, managers as their e-mail addresses. The schema
+    accepts the same text back
+    ([OAIHarvesterSchema][oarepo_oaipmh_harvester.oai_harvester.schema.OAIHarvesterSchema]).
+    """
+
+    @override
+    def serialize_object(self, obj: Any) -> str:
+        """Serialize a single harvester for the edit form."""
+        return super().serialize_object(self._convert_to_form(obj))
+
+    def _convert_to_form(self, serialized_harvester: dict[str, Any]) -> dict[str, Any]:
+        return {
+            **serialized_harvester,
+            "transformers": "\n".join(serialized_harvester.get("transformers") or []),
+            "writers": "\n".join(serialized_harvester.get("writers") or []),
+            "harvest_managers": "\n".join(_manager_emails(serialized_harvester)),
+        }
 
 
 class OAIHarvesterResourceConfig(RecordResourceConfig, ConfiguratorMixin):
@@ -79,7 +114,12 @@ class OAIHarvesterResourceConfig(RecordResourceConfig, ConfiguratorMixin):
             serializer=JSONSerializer(),
             headers=etag_headers,
         ),
+        # the administration edit page fetches the record with react-invenio-forms' default Accept
         "application/vnd.inveniordm.v1+json": ResponseHandler(
+            serializer=AdministrationEditJSONSerializer(),
+            headers=etag_headers,
+        ),
+        "application/invenio-administration-detail+json": ResponseHandler(
             serializer=AdministrationDetailJSONSerializer(),
             headers=etag_headers,
         ),

@@ -94,7 +94,7 @@ class OAIPMHListView(OAIHarvesterPermissionsMixin, AdminResourceListView):
     item_field_list: Mapping[str, dict[str, Any]] = {
         "name": {"text": _("Name"), "order": 1},
         "id": {"text": _("Code"), "order": 2},
-        "baseurl": {"text": _("Base URL"), "order": 3},
+        "base_url": {"text": _("Base URL"), "order": 3},
         "metadata_prefix": {"text": _("Metadata prefix"), "order": 4},
     }
 
@@ -110,7 +110,7 @@ class OAIPMHDetailView(OAIHarvesterPermissionsMixin, AdminResourceDetailView):
 
     url = "/oarepo/harvesters/<pid_value>"
     api_endpoint = "/oai/harvest/harvesters/"
-    request_headers: Mapping[str, str] = {"Accept": "application/vnd.inveniordm.v1+json"}
+    request_headers: Mapping[str, str] = {"Accept": "application/invenio-administration-detail+json"}
     name = "oarepo_oaipmh_harvesters_detail"
     resource_config = "oai_harvester_resource"
     title = "OAI-PMH Harvesters"
@@ -135,11 +135,9 @@ class OAIPMHDetailView(OAIHarvesterPermissionsMixin, AdminResourceDetailView):
         "id": {"text": _("Code"), "order": 2},
         "setspec": {"text": _("Set specification"), "order": 4},
         "metadata_prefix": {"text": _("Metadata prefix"), "order": 5},
-        "baseurl": {"text": _("Base URL"), "order": 6},
+        "base_url": {"text": _("Base URL"), "order": 6},
         "loader": {"text": _("Loader"), "order": 7},
         "writers": {"text": _("Writer"), "order": 8, "escape": True},
-        "batch_size": {"text": _("Batch size"), "order": 9},
-        "max_records": {"text": _("Maximum number of records"), "order": 10},
         "transformers": {
             "text": _("Transformers"),
             "escape": True,
@@ -176,7 +174,7 @@ class OAIHarvesterFormMixin(_FormViewBase):
             "text": _("Code"),
             "required": True,
         },
-        "baseurl": {
+        "base_url": {
             "order": 3,
             "text": _("Base URL"),
             "required": True,
