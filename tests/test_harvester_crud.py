@@ -110,3 +110,40 @@ def test_harvester_crud(db, app, search, search_clear, user_with_administration_
 
     with pytest.raises(PIDDoesNotExistError):
         current_oai_harvester_service.read(system_identity, harvester.id)
+
+
+def test_admin_fields_exist_in_schema():
+    """The admin form generator crashes on form fields missing in the resource schema."""
+    from oarepo_oaipmh_harvester.administration.harvester.views import (
+        OAIHarvesterFormMixin,
+        OAIPMHDetailView,
+        OAIPMHListView,
+    )
+    from oarepo_oaipmh_harvester.oai_harvester.schema import OAIHarvesterSchema
+
+    schema_fields = set(OAIHarvesterSchema().fields)
+    for fields in (OAIHarvesterFormMixin.form_fields, OAIPMHListView.item_field_list, OAIPMHDetailView.item_field_list):
+        assert set(fields) <= schema_fields, set(fields) - schema_fields
+
+
+def test_admin_form_text_round_trip(app, db, users):
+    """The edit form gets newline separated text and saves it back."""
+    from oarepo_oaipmh_harvester.oai_harvester.resource import AdministrationEditJSONSerializer
+    from oarepo_oaipmh_harvester.oai_harvester.schema import OAIHarvesterSchema
+
+    stored = {
+        "transformers": ["oai-import{model:'datasets'}", "id-from-doi"],
+        "writers": ['oai-service{"model": "datasets"}'],
+        "harvest_managers": [{"user": str(users[0].id)}],
+    }
+    form = AdministrationEditJSONSerializer()._convert_to_form(stored)
+    assert form["transformers"] == "oai-import{model:'datasets'}\nid-from-doi"
+    assert form["harvest_managers"] == users[0].email
+
+    from oarepo_oaipmh_harvester.oai_harvester.resource import AdministrationDetailJSONSerializer
+
+    detail = AdministrationDetailJSONSerializer()._convert_to_administration_detail(stored)
+    assert detail["harvest_managers"] == users[0].email
+
+    loaded = OAIHarvesterSchema()._load_form_text({**form, "writers": form["writers"] + "\n\n"})
+    assert loaded == stored

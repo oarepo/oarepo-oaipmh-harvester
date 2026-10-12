@@ -5,7 +5,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import marshmallow as ma
+from invenio_accounts.models import User
 from invenio_records_resources.services.records.schema import (
     BaseRecordSchema,
 )
@@ -51,3 +54,29 @@ class OAIHarvesterSchema(BaseRecordSchema):
 
     harvest_managers = fields.List(fields.Nested(HarvestManagerSchema), load_default=list)
     """The list of harvest managers."""
+
+    @ma.pre_load
+    def _load_form_text(self, data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+        """Accept the administration form's textareas - newline separated values.
+
+        `transformers` / `writers` become lists, `harvest_managers` e-mail addresses become
+        `{"user": <id>}`. Lists (the REST API) pass through unchanged.
+        """
+        data = dict(data)
+        for key in ("transformers", "writers", "harvest_managers"):
+            if isinstance(data.get(key), str):
+                data[key] = [line.strip() for line in data[key].splitlines() if line.strip()]
+        managers = data.get("harvest_managers") or []
+        if any(isinstance(manager, str) for manager in managers):
+            data["harvest_managers"] = [
+                {"user": _user_id(manager)} if isinstance(manager, str) else manager for manager in managers
+            ]
+        return data
+
+
+def _user_id(email: str) -> str:
+    """Return the id of the user with the e-mail address."""
+    user = User.query.filter_by(email=email).one_or_none()
+    if user is None:
+        raise ma.ValidationError(f"No user with e-mail {email}.", field_name="harvest_managers")
+    return str(user.id)
