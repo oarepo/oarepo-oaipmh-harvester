@@ -1,0 +1,38 @@
+{#
+  SPDX-FileCopyrightText: 2026 CESNET z.s.p.o
+  SPDX-License-Identifier: MIT
+
+  /about/harvest page, see oarepo_oaipmh_harvester.views.
+  Context: harvesters - list of (harvester, stats); stats has last_harvested, records, failed.
+#}
+{%- extends config.BASE_TEMPLATE %}
+
+{%- block page_body %}
+<div class="ui container rel-mt-2 rel-mb-2">
+  <h1 class="ui header">{{ _("Harvested sources") }}</h1>
+  {% for harvester, stats in harvesters %}
+  <div class="ui segment">
+    {# no base_url - it may contain credentials #}
+    <h2 class="ui header">{{ harvester.name }}</h2>
+    {% if harvester.comment %}<p>{{ harvester.comment }}</p>{% endif %}
+    <table class="ui very basic compact table">
+      <tbody>
+        <tr><th>{{ _("Metadata prefix") }}</th><td>{{ harvester.metadata_prefix }}</td></tr>
+        {% if harvester.setspec %}<tr><th>{{ _("Set") }}</th><td><code>{{ harvester.setspec }}</code></td></tr>{% endif %}
+        <tr><th>{{ _("Loader") }}</th><td><code>{{ harvester.loader }}</code></td></tr>
+        <tr><th>{{ _("Transformers") }}</th><td>{% for t in harvester.transformers %}<code>{{ t }}</code><br>{% endfor %}</td></tr>
+        <tr><th>{{ _("Writers") }}</th><td>{% for w in harvester.writers %}<code>{{ w }}</code><br>{% endfor %}</td></tr>
+        <tr>
+          <th>{{ _("Last harvested") }}</th>
+          <td>{{ stats.last_harvested.strftime("%Y-%m-%d %H:%M UTC") if stats.last_harvested else _("Never") }}</td>
+        </tr>
+        <tr><th>{{ _("Records") }}</th><td>{{ stats.records }}</td></tr>
+        <tr><th>{{ _("Records with errors") }}</th><td>{{ stats.failed }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p>{{ _("No harvesters are configured.") }}</p>
+  {% endfor %}
+</div>
+{%- endblock page_body %}

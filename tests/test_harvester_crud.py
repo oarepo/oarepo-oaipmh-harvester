@@ -147,3 +147,35 @@ def test_admin_form_text_round_trip(app, db, users):
 
     loaded = OAIHarvesterSchema()._load_form_text({**form, "writers": form["writers"] + "\n\n"})
     assert loaded == stored
+
+
+def test_about_harvest_page(app, db, harvester):
+    """The public page lists the harvesters with their configuration and statistics."""
+    from datetime import UTC, datetime
+
+    from oarepo_oaipmh_harvester.oai_record.models import OAIHarvestedRecord
+
+    for i, has_errors in enumerate([False, True]):
+        db.session.add(
+            OAIHarvestedRecord(
+                oai_identifier=f"oai:test:{i}",
+                harvester_id=harvester,
+                datestamp=datetime(2025, 1, 1, tzinfo=UTC),
+                harvested_at=datetime(2025, 1, 2, 3, 4, tzinfo=UTC),
+                has_errors=has_errors,
+                errors=[],
+                original_data={},
+                transformed_data={},
+            )
+        )
+    db.session.commit()
+
+    from oarepo_oaipmh_harvester.views import about_harvest
+
+    with app.test_request_context("/about/harvest"):
+        html = about_harvest()
+    assert "Test Harvester" in html
+    assert "oai-import{&#34;model&#34;:&#34;test&#34;}" in html
+    assert "2025-01-02 03:04 UTC" in html
+    assert "<th>Records</th><td>2</td>" in html
+    assert "<th>Records with errors</th><td>1</td>" in html
