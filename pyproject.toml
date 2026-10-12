@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "oarepo-oai-pmh-harvester"
-version = "9.5.0"
+version = "9.5.1"
 description = 'OAIPMH harvester for Invenio repositories'
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
