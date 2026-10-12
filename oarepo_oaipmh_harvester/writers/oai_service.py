@@ -76,6 +76,7 @@ from invenio_vocabularies.datastreams.writers import BaseWriter
 from oarepo_runtime import current_runtime
 from sqlalchemy.exc import NoResultFound
 
+from oarepo_oaipmh_harvester.oai_record.api import OAIRecordAggregate
 from oarepo_oaipmh_harvester.oai_record.models import (
     OAIHarvestedRecord,
 )
@@ -649,7 +650,16 @@ class OAIServiceWriter(BaseWriter):
         db.session.add(oai_record)
         db.session.commit()
 
-        current_oai_record_service.indexer.bulk_index([oai_record.oai_identifier])
+        # indexed right away - the bulk queue is processed only by a running celery beat,
+        # so the administration would show the state of a previous harvest until then
+        try:
+            indexer = current_oai_record_service.indexer
+            indexer.index(OAIRecordAggregate.from_model(oai_record))
+        except Exception:
+            current_app.logger.exception(
+                "Could not index harvest record %s, queued for bulk indexing", oai_record.oai_identifier
+            )
+            current_oai_record_service.indexer.bulk_index([oai_record.oai_identifier])
         return oai_record.errors
 
     def _write(
@@ -783,7 +793,8 @@ class OAIServiceWriter(BaseWriter):
 
         return {
             "type": type(exception).__name__,
-            "message": str(exception),
+            # e.g. KeyError() or AssertionError without a message
+            "message": str(exception) or f"{type(exception).__name__} (no message)",
             "location": "\n".join(formatted_tb),
         }
 
@@ -793,7 +804,7 @@ class OAIServiceWriter(BaseWriter):
             return error
         if isinstance(error, Exception):
             return self._convert_exception_to_error_dict(error)
-        return {"message": str(error)}
+        return {"message": str(error) or "Unknown error (no message)"}
 
     def _convert_to_oai_error(self, error: Any) -> Generator[dict]:
         """Convert a service error to an OAI-PMH error dict (type, location, message)."""
