@@ -446,3 +446,38 @@ def test_files_disabled_when_not_in_record(app, db, search_clear, rdm_test_model
         assert read["media_files"]["enabled"] is False
     # stored as produced by the transformer
     assert "files" not in _oai_record(db).transformed_data
+
+
+def test_errors_are_faceted_in_search_document():
+    """Long messages and tracebacks would exceed the keyword `ignore_above` and not be indexed."""
+    from oarepo_oaipmh_harvester.oai_record.dumpers import MAX_KEYWORD_LENGTH, ErrorsFacetDumperExt
+
+    data = {
+        "errors": [
+            {
+                "type": "IntegrityError",
+                "message": "(psycopg2.errors.ForeignKeyViolation) insert or update\n violates " + "x" * 1000,
+                "location": "write@a.py:1\n    self = <writer>\n_flush@b.py:2\n    x = 1",
+            },
+            {"type": "KeyError", "message": "", "location": "f@c.py:3"},
+            {"type": "validation_error", "message": "Missing data", "location": "metadata.title"},
+        ]
+    }
+    ErrorsFacetDumperExt().dump(None, data)
+    long_error, empty_error, validation_error = data["errors"]
+    assert len(long_error["message"]) == MAX_KEYWORD_LENGTH
+    assert long_error["message"].startswith("(psycopg2.errors.ForeignKeyViolation) insert or update violates")
+    assert long_error["message"].endswith("…")
+    assert long_error["location"] == "_flush@b.py:2"  # innermost frame
+    assert empty_error["message"] == "KeyError (no message)"
+    assert validation_error == {"type": "validation_error", "message": "Missing data", "location": "metadata.title"}
+
+
+def test_exception_without_message_gets_placeholder():
+    writer = OAIServiceWriter.__new__(OAIServiceWriter)
+    try:
+        raise KeyError
+    except KeyError as e:
+        error = writer._convert_exception_to_error_dict(e)
+    assert error["type"] == "KeyError"
+    assert error["message"] == "KeyError (no message)"

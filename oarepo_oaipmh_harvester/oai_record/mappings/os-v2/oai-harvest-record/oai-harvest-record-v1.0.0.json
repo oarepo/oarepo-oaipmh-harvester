@@ -47,15 +47,15 @@
                 "properties": {
                     "message": {
                         "type": "keyword",
-                        "ignore_above": 128
+                        "ignore_above": 512
                     },
                     "type": {
                         "type": "keyword",
-                        "ignore_above": 128
+                        "ignore_above": 512
                     },
                     "location": {
                         "type": "keyword",
-                        "ignore_above": 128
+                        "ignore_above": 512
                     }
                 }
             },

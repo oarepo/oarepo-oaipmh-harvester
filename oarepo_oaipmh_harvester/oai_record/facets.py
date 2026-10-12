@@ -27,8 +27,8 @@ has_warnings = TermsFacet(
     value_labels={True: _("Yes"), False: _("No")},
 )
 error_code = TermsFacet(
-    field="errors.code",
-    label=_("Error code"),
+    field="errors.type",
+    label=_("Error type"),
 )
 error_message = TermsFacet(
     field="errors.message",

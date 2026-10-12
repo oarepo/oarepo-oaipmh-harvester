@@ -15,7 +15,7 @@ from invenio_records.systemfields import ModelField
 from invenio_records_resources.records.systemfields import IndexField
 from invenio_users_resources.records.api import BaseAggregate
 
-from .dumpers import AddHarvesterDumperExt
+from .dumpers import AddHarvesterDumperExt, ErrorsFacetDumperExt
 from .models import OAIHarvestedRecord, OAIRecordAggregateModel
 
 if TYPE_CHECKING:
@@ -32,6 +32,7 @@ class OAIRecordAggregate(BaseAggregate):
         extensions=[
             IndexedAtDumperExt(),
             AddHarvesterDumperExt(),
+            ErrorsFacetDumperExt(),
         ],
         model_fields={
             "id": ("uuid", str),
