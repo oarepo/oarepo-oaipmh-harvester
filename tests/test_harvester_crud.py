@@ -114,16 +114,19 @@ def test_harvester_crud(db, app, search, search_clear, user_with_administration_
 
 
 def test_admin_fields_exist_in_schema():
-    """The admin form generator crashes on form fields missing in the resource schema."""
+    """The admin form generator crashes on form fields missing in the resource schema.
+
+    The list view shows the search results (schema fields); the detail view may show
+    extra fields added by its serializer, so it is not checked.
+    """
     from oarepo_oaipmh_harvester.administration.harvester.views import (
         OAIHarvesterFormMixin,
-        OAIPMHDetailView,
         OAIPMHListView,
     )
     from oarepo_oaipmh_harvester.oai_harvester.schema import OAIHarvesterSchema
 
     schema_fields = set(OAIHarvesterSchema().fields)
-    for fields in (OAIHarvesterFormMixin.form_fields, OAIPMHListView.item_field_list, OAIPMHDetailView.item_field_list):
+    for fields in (OAIHarvesterFormMixin.form_fields, OAIPMHListView.item_field_list):
         assert set(fields) <= schema_fields, set(fields) - schema_fields
 
 
@@ -186,3 +189,13 @@ def test_about_harvest_page(app, db, harvester):
     assert "2025-01-02 03:04 UTC" in html
     assert "<th>Records</th><td>2</td>" in html
     assert "<th>Records with errors</th><td>1</td>" in html
+    # anonymous - no links to the administration
+    assert "/administration/" not in html
+
+
+def test_about_harvest_page_links_for_managers(app, db, harvester, client, user_with_administration_rights):
+    """Users with administration access (or harvest managers) get links to the administration."""
+    user_with_administration_rights.login(client)
+    html = client.get("/about/harvest").get_data(as_text=True)
+    assert f"/administration/oarepo/harvesters/{harvester}" in html
+    assert "/administration/oarepo/harvest/records?q=harvester_id" in html

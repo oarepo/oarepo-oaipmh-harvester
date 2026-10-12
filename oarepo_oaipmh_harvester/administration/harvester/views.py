@@ -8,7 +8,6 @@ from __future__ import annotations
 import functools
 from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, cast
 
-from flask_principal import UserNeed
 from invenio_access.permissions import Permission
 from invenio_administration.permissions import (
     administration_access_action,
@@ -21,6 +20,8 @@ from invenio_administration.views.base import (
 from invenio_i18n import lazy_gettext as _
 
 from ...oai_harvester.models import OAIHarvester
+from ...oai_harvester.schema import HarvestActionSchema
+from ...permissions import harvest_manager_need
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -44,7 +45,7 @@ def oai_harvester_permissions_decorator[**P, R_co](
         for md in OAIHarvester.query.all():
             for manager in md.harvest_managers or []:
                 if "user" in manager:
-                    manager_needs.add(UserNeed(manager["user"]))
+                    manager_needs.add(harvest_manager_need(manager))
         oai_harvester_permission = Permission(administration_access_action, *manager_needs)
 
         return cast(
@@ -82,7 +83,7 @@ class OAIPMHListView(OAIHarvesterPermissionsMixin, AdminResourceListView):
         "harvest": {
             "text": "Run",
             "order": 1,
-            "payload_schema": None,
+            "payload_schema": HarvestActionSchema,
         }
     }
 
@@ -123,7 +124,7 @@ class OAIPMHDetailView(OAIHarvesterPermissionsMixin, AdminResourceDetailView):
         "harvest": {
             "text": "Run",
             "order": 1,
-            "payload_schema": None,
+            "payload_schema": HarvestActionSchema,
         }
     }
 
@@ -149,6 +150,11 @@ class OAIPMHDetailView(OAIHarvesterPermissionsMixin, AdminResourceDetailView):
         "harvest_managers": {
             "text": _("Harvest managers"),
             "order": 15,
+            "escape": True,
+        },
+        "harvested_records": {
+            "text": _("Harvested records"),
+            "order": 16,
             "escape": True,
         },
     }

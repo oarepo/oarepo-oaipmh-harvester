@@ -77,3 +77,15 @@ class OAIHarvesterSchema(BaseRecordSchema):
             if isinstance(data.get(key), str):
                 data[key] = [line.strip() for line in data[key].splitlines() if line.strip()]
         return data
+
+
+class HarvestActionSchema(ma.Schema):
+    """Payload of the administration "Run" action."""
+
+    all_records = fields.Boolean(
+        load_default=False,
+        metadata={
+            "title": "Harvest all records",
+            "description": "If not checked, only records modified since the last harvest are harvested.",
+        },
+    )

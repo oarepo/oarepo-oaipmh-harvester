@@ -37,6 +37,15 @@ if TYPE_CHECKING:
     from invenio_search.engine import dsl
 
 
+def harvest_manager_need(manager: dict[str, Any]) -> Need:
+    """Return the need of a harvest manager entry (`{"user": id}`).
+
+    The user id is stored as a string, but the identity provides `UserNeed` with
+    an integer user id, so it is converted here to make the needs match.
+    """
+    return UserNeed(int(manager["user"]))
+
+
 class HarvestManager(Generator):
     """Grants harvest managers access to the harvesters they manage."""
 
@@ -46,7 +55,8 @@ class HarvestManager(Generator):
         if "record" not in kwargs:
             return []
         record = kwargs["record"]
-        return [UserNeed(manager["user"]) for manager in record.get("harvest_managers", []) if "user" in manager]
+        # the record is an aggregate (its dict data is empty), so read the model field
+        return [harvest_manager_need(manager) for manager in (record.harvest_managers or []) if "user" in manager]
 
     @override
     def query_filter(self, **kwargs: Any) -> dsl.query.Query | list[dsl.query.Query] | None:
@@ -106,7 +116,7 @@ class HarvestRecordManager(Generator):
 
         harvester = kwargs["record"].harvester
 
-        return [UserNeed(manager["user"]) for manager in (harvester.harvest_managers or []) if "user" in manager]
+        return [harvest_manager_need(manager) for manager in (harvester.harvest_managers or []) if "user" in manager]
 
     def query_filter(self, **kwargs: Any) -> dsl.query.Query | list[dsl.query.Query] | None:
         """Restrict search to records of harvesters managed by the identity."""
