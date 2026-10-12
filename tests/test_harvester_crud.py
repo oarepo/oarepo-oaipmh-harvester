@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import marshmallow as ma
 import pytest
 from invenio_access.permissions import system_identity
 from invenio_pidstore.errors import PIDDoesNotExistError
@@ -145,8 +146,14 @@ def test_admin_form_text_round_trip(app, db, users):
     detail = AdministrationDetailJSONSerializer()._convert_to_administration_detail(stored)
     assert detail["harvest_managers"] == users[0].email
 
-    loaded = OAIHarvesterSchema()._load_form_text({**form, "writers": form["writers"] + "\n\n"})
+    loaded = OAIHarvesterSchema(only=("transformers", "writers", "harvest_managers")).load(
+        {**form, "writers": form["writers"] + "\n\n"}
+    )
     assert loaded == stored
+
+    with pytest.raises(ma.ValidationError) as e:
+        OAIHarvesterSchema(only=("harvest_managers",)).load({"harvest_managers": "nobody@example.org"})
+    assert e.value.messages == {"harvest_managers": {0: {"_schema": ["No user with e-mail nobody@example.org."]}}}
 
 
 def test_about_harvest_page(app, db, harvester):

@@ -292,7 +292,7 @@ def harvester(app, db, search_clear):
         "loader": "oai-pmh",
         "transformers": ['oai-import{"model":"test"}'],
         "writers": ['oai-service{"model":"test","update":true,"publish":false}'],
-        "harvest_managers": ["1"],
+        "harvest_managers": [],
         "comment": "This is a test harvester.",
     }
 
