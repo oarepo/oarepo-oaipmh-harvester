@@ -33,9 +33,11 @@ from invenio_records_resources.services.records.queryparser import (
     SuggestQueryParser,
 )
 from invenio_records_resources.services.uow import RecordCommitOp, RecordDeleteOp
+from sqlalchemy import func
 
 from oarepo_oaipmh_harvester.links import ActionLinks
 
+from ..oai_record.models import OAIHarvestedRecord
 from ..permissions import OAIHarvesterPermissionPolicy
 from . import facets
 from .api import OAIHarvesterAggregate
@@ -123,26 +125,26 @@ class OAIHarvesterServiceConfig(RecordServiceConfig, ConfiguratorMixin):
 
     # links configuration
     links_item: Mapping[str, Any] = {
-        "self": Link("{+api}/oai/harvest/harvester/{id}"),
+        "self": RecordLink("{+api}/oai/harvest/harvesters/{id}"),
         "actions": ActionLinks(
             {
                 "harvest": RecordLink(
-                    "{+api}/oai/harvest/harvester/{id}/harvest",
+                    "{+api}/oai/harvest/harvesters/{id}/start",
                 ),
             }
         ),
     }
     links_search_item: Mapping[str, Any] = {
-        "self": Link("{+api}/oai/harvest/harvester/{id}"),
+        "self": RecordLink("{+api}/oai/harvest/harvesters/{id}"),
         "actions": ActionLinks(
             {
                 "harvest": RecordLink(
-                    "{+api}/oai/harvest/harvester/{id}/harvest",
+                    "{+api}/oai/harvest/harvesters/{id}/start",
                 ),
             }
         ),
     }
-    links_search = pagination_links("{+api}/oai/harvest/harvester{?args*}")
+    links_search = pagination_links("{+api}/oai/harvest/harvesters/{?args*}")
 
     components = ()
 
@@ -307,8 +309,12 @@ class OAIHarvesterService(RecordService):
         self.indexer.bulk_index([u.id for u in oai_harvesters])
         return True
 
-    def harvest(self, identity: Identity, id_: str) -> RecordItem:
-        """Start a harvest of the harvester's source."""
+    def harvest(self, identity: Identity, id_: str, all_records: bool = True) -> RecordItem:
+        """Start a harvest of the harvester's source.
+
+        With `all_records=False` only records changed at the source since the newest OAI
+        datestamp already harvested are harvested (all records if nothing was harvested yet).
+        """
         # resolve and require permission
         oai_harvester = OAIHarvesterAggregate.get_record(id_)
         if oai_harvester is None:
@@ -318,7 +324,14 @@ class OAIHarvesterService(RecordService):
 
         from ..tasks import harvest_oaipmh_records
 
+        since = (
+            None
+            if all_records
+            else db.session.query(func.max(OAIHarvestedRecord.datestamp))
+            .filter_by(harvester_id=oai_harvester.id)
+            .scalar()
+        )
         # Fire-and-forget: we do not need the result of the Celery task here.
-        harvest_oaipmh_records.delay(harvester_id=oai_harvester.id)
+        harvest_oaipmh_records.delay(harvester_id=oai_harvester.id, **({"since": since.isoformat()} if since else {}))
 
         return self.result_item(self, identity, oai_harvester, links_tpl=self.links_item_tpl)

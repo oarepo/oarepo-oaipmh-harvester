@@ -232,3 +232,52 @@ def test_no_report_without_managers(app, db, search_clear, test_model, location,
     with app.extensions["mail"].record_messages() as outbox:
         harvest_oaipmh_records(harvester_id=harvester, since=None, batch_size=1)
     assert outbox == []
+
+
+def test_harvest_modified_records_only(app, db, search_clear, harvester, mocker):
+    """Harvesting modified records only starts from the newest datestamp already harvested."""
+    from datetime import UTC, datetime
+
+    from oarepo_oaipmh_harvester.oai_record.models import OAIHarvestedRecord
+    from oarepo_oaipmh_harvester.proxies import current_oai_harvester_service
+
+    delay = mocker.patch("oarepo_oaipmh_harvester.tasks.harvest_oaipmh_records.delay")
+
+    # nothing harvested yet - everything
+    current_oai_harvester_service.harvest(system_identity, harvester, all_records=False)
+    delay.assert_called_once_with(harvester_id=harvester)
+
+    for day in (1, 5):
+        db.session.add(
+            OAIHarvestedRecord(
+                oai_identifier=f"oai:test:{day}",
+                harvester_id=harvester,
+                datestamp=datetime(2025, 1, day, tzinfo=UTC),
+                harvested_at=datetime(2025, 2, 1, tzinfo=UTC),
+                errors=[],
+                original_data={},
+                transformed_data={},
+            )
+        )
+    db.session.commit()
+    delay.reset_mock()
+    current_oai_harvester_service.harvest(system_identity, harvester, all_records=False)
+    delay.assert_called_once_with(harvester_id=harvester, since="2025-01-05T00:00:00+00:00")
+
+
+def test_harvest_action_payload(app, db, search_clear, harvester, client, user_with_administration_rights, mocker):
+    """The administration "Run" action posts `all_records`; without a payload everything is harvested."""
+    delay = mocker.patch("oarepo_oaipmh_harvester.tasks.harvest_oaipmh_records.delay")
+    user_with_administration_rights.api_login(client)
+
+    # the administration posts to the action link of the harvester
+    links = client.get(f"/api/oai/harvest/harvesters/{harvester}").get_json()["links"]
+    assert links["self"].endswith(f"/api/oai/harvest/harvesters/{harvester}")
+    assert links["actions"]["harvest"].endswith(f"/api/oai/harvest/harvesters/{harvester}/start")
+
+    assert client.post(f"/api/oai/harvest/harvesters/{harvester}/start", json={"all_records": True}).status_code == 200
+    delay.assert_called_once_with(harvester_id=harvester)
+    delay.reset_mock()
+    # nothing harvested yet, so modified-only harvests everything as well
+    assert client.post(f"/api/oai/harvest/harvesters/{harvester}/start", json={"all_records": False}).status_code == 200
+    delay.assert_called_once_with(harvester_id=harvester)

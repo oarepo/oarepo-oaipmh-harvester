@@ -17,18 +17,24 @@ from flask_resources import (
 )
 from flask_resources.serializers.json import JSONSerializer
 from invenio_accounts.models import User
+from invenio_base.urls import invenio_url_for
+from invenio_i18n import gettext as _
 from invenio_records_resources.resources import RecordResource, RecordResourceConfig
 from invenio_records_resources.resources.records.headers import etag_headers
 from invenio_records_resources.resources.records.resource import (
+    request_data,
     request_search_args,
     request_view_args,
 )
 from invenio_records_resources.resources.records.utils import search_preference
 from invenio_records_resources.services.base.config import ConfiguratorMixin
-from markupsafe import escape
+from invenio_search.api import RecordsSearchV2
+from markupsafe import Markup, escape
 from pygments import highlight
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import YamlLexer
+
+from ..oai_record.api import OAIRecordAggregate
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -46,6 +52,20 @@ def _manager_emails(serialized_harvester: dict[str, Any]) -> list[str]:
     return [user.email for user in User.query.filter(User.id.in_(user_ids))] if user_ids else []
 
 
+def _harvested_records_html(harvester_id: str) -> str:
+    """Return links to the harvester's records (all and failed) in administration, with their counts."""
+    search = RecordsSearchV2(index=OAIRecordAggregate.index.search_alias).filter("term", harvester_id=harvester_id)
+    total = search.count()
+    failed = search.filter("term", has_errors=True).count()
+    query = f'harvester_id:"{harvester_id}"'
+    return Markup('<a href="{}">{}</a>, <a href="{}">{}</a>').format(
+        invenio_url_for("administration.oarepo_oaipmh_harvest_records", q=query),
+        _("%(count)s records", count=total),
+        invenio_url_for("administration.oarepo_oaipmh_harvest_records", q=f"{query} AND has_errors:true"),
+        _("%(count)s failed", count=failed),
+    )
+
+
 class AdministrationDetailJSONSerializer(JSONSerializer):
     """JSON serializer for administration API."""
 
@@ -53,6 +73,8 @@ class AdministrationDetailJSONSerializer(JSONSerializer):
     def serialize_object(self, obj: Any) -> str:
         """Serialize a single harvester into the administration detail form."""
         obj = self._convert_to_administration_detail(obj)
+        # rendered as html by the detail view; only here, as it costs two searches per harvester
+        obj["harvested_records"] = _harvested_records_html(obj["id"])
         return super().serialize_object(obj)
 
     @override
@@ -167,11 +189,13 @@ class OAIHarvesterResource(RecordResource):
         return item.to_dict(), 200
 
     @request_view_args
+    @request_data
     @response_handler()
     def harvest(self) -> tuple[dict[str, Any], int]:
-        """Re-harvest the source."""
+        """Harvest the source - all records unless the payload has `all_records: false`."""
         item = self.service.harvest(
             id_=resource_requestctx.view_args["pid_value"],
             identity=g.identity,
+            all_records=(resource_requestctx.data or {}).get("all_records", True),
         )
         return item.to_dict(), 200

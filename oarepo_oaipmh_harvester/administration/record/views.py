@@ -8,7 +8,6 @@ from __future__ import annotations
 import functools
 from typing import TYPE_CHECKING, Any, cast
 
-from flask_principal import UserNeed
 from invenio_access.permissions import Permission
 from invenio_administration.permissions import (
     administration_access_action,
@@ -20,6 +19,7 @@ from invenio_administration.views.base import (
 from invenio_i18n import lazy_gettext as _
 
 from ...oai_harvester.models import OAIHarvester
+from ...permissions import harvest_manager_need
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -38,7 +38,7 @@ def oai_record_permissions_decorator[**P, R_co](
         for md in OAIHarvester.query.all():
             for manager in md.harvest_managers or []:
                 if "user" in manager:
-                    manager_needs.add(UserNeed(manager["user"]))
+                    manager_needs.add(harvest_manager_need(manager))
         oai_record_permission = Permission(administration_access_action, *manager_needs)
 
         return cast(
