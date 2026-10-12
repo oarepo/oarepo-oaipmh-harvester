@@ -75,6 +75,7 @@ oarepo_oaipmh_record_list = "oarepo_oaipmh_harvester.administration.record.views
 oarepo_oaipmh_record_details = "oarepo_oaipmh_harvester.administration.record.views:RecordDetailView"
 
 [project.entry-points."invenio_base.blueprints"]
+oarepo_oaipmh_harvester_templates = "oarepo_oaipmh_harvester.report:create_templates_blueprint"
 # oarepo-oaipmh-harvester = "oarepo_oaipmh_harvester.oai_harvester.views.records.app:create_app_blueprint"
 
 [project.entry-points."invenio_i18n.translations"]
@@ -86,6 +87,7 @@ oarepo-oaipmh-harvester = "oarepo_oaipmh_harvester.oai_harvester.models"
 oarepo-oaipmh-harvester-record = "oarepo_oaipmh_harvester.oai_record.models"
 
 [project.entry-points."invenio_base.api_blueprints"]
+oarepo_oaipmh_harvester_templates = "oarepo_oaipmh_harvester.report:create_templates_blueprint"
 oarepo-oaipmh-harvester = "oarepo_oaipmh_harvester.oai_harvester.views:create_api_blueprint"
 oarepo-oaipmh-harvester_record = "oarepo_oaipmh_harvester.oai_record.views:create_api_blueprint"
 

@@ -41,6 +41,7 @@ from invenio_jobs.jobs import JobType
 from oarepo_oaipmh_harvester.datastream import create_datastream
 from oarepo_oaipmh_harvester.oai_harvester.api import OAIHarvesterAggregate
 from oarepo_oaipmh_harvester.oai_harvester.models import OAIHarvester
+from oarepo_oaipmh_harvester.report import HarvestReport, send_harvest_report
 
 _SECONDS_GRANULARITY = "YYYY-MM-DDThh:mm:ssZ"
 MAX_LOGGED_ERROR_LENGTH = 300
@@ -98,8 +99,32 @@ def harvest_oaipmh_records(
     since: datetime | None = None,
     batch_size: int | None = None,
 ) -> None:
-    """Harvest OAI-PMH records for the given harvester."""
+    """Harvest OAI-PMH records for the given harvester, then mail a report to its harvest managers."""
     harvester = OAIHarvesterAggregate.get_record(harvester_id)
+    report = HarvestReport()
+    try:
+        _harvest(harvester, report, oai_ids=oai_ids, since=since, batch_size=batch_size)
+    except Exception as e:
+        report.error = f"{type(e).__name__}: {e}"
+        raise
+    finally:
+        report.finished_at = datetime.now(UTC)
+        try:
+            send_harvest_report(harvester, report)
+        except Exception:
+            # the report must not hide the harvest's own outcome
+            current_app.logger.exception("Could not send the report of harvester %s", harvester_id)
+
+
+def _harvest(
+    harvester: OAIHarvesterAggregate,
+    report: HarvestReport,
+    *,
+    oai_ids: list[str] | None,
+    since: datetime | None,
+    batch_size: int | None,
+) -> None:
+    """Run the harvest, recording the outcome of every record in the report."""
     readers_config = create_readers(harvester, since=since, oai_ids=oai_ids)
     transformers_config = create_transformers(harvester)
     writers_config = create_writers(harvester)
@@ -121,8 +146,10 @@ def harvest_oaipmh_records(
             if len(summary) > MAX_LOGGED_ERROR_LENGTH:
                 summary = summary[: MAX_LOGGED_ERROR_LENGTH - 3] + "..."
             current_app.logger.error("Entry %s: failed: %s", oai_identifier, summary)
+            report.add_failure(oai_identifier, summary)
         else:
             current_app.logger.info("Entry %s: processed successfully", oai_identifier)
+            report.add_ok()
 
 
 def parse_config(config: str) -> tuple[str, dict]:

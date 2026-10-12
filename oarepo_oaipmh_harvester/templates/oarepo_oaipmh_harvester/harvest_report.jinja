@@ -1,0 +1,85 @@
+{#
+  SPDX-FileCopyrightText: 2026 CESNET z.s.p.o
+  SPDX-License-Identifier: MIT
+
+  Mail sent to harvest managers when a harvest ends, see oarepo_oaipmh_harvester.report.
+  Context: harvester (OAIHarvesterAggregate), report (HarvestReport).
+#}
+{% set failed_records_link = invenio_url_for(
+    "administration.oarepo_oaipmh_harvest_records",
+    q='harvester_id:"' ~ harvester.id ~ '" AND has_errors:true',
+) %}
+{% set not_listed = report.failed - report.failures|length %}
+
+{%- block subject -%}
+{% if report.error %}
+{{ _("Harvest of %(name)s failed", name=harvester.name) }}
+{% elif report.failed %}
+{{ _("Harvest of %(name)s finished with %(failed)s failed and %(ok)s ok record(s)", name=harvester.name, failed=report.failed, ok=report.ok) }}
+{% else %}
+{{ _("Harvest of %(name)s finished successfully with %(ok)s ok record(s)", name=harvester.name, ok=report.ok) }}
+{% endif %}
+{%- endblock subject -%}
+
+{%- block html_body -%}
+<table style="font-family:'Lato',Helvetica,Arial,sans-serif;border-spacing:15px">
+    <tr><td>
+        {{ _("Harvester") }}: <strong>{{ harvester.name }}</strong> ({{ harvester.id }})<br>
+        {{ _("Started") }}: {{ report.started_at.strftime("%Y-%m-%d %H:%M:%S UTC") }}<br>
+        {{ _("Finished") }}: {{ report.finished_at.strftime("%Y-%m-%d %H:%M:%S UTC") }}
+    </td></tr>
+    {% if report.error %}
+    <tr><td><strong>{{ _("The harvest did not finish:") }}</strong> {{ report.error }}</td></tr>
+    {% endif %}
+    <tr><td>
+        {{ _("Records processed successfully") }}: {{ report.ok }}<br>
+        {{ _("Records with errors") }}: {{ report.failed }}
+    </td></tr>
+    {% if report.failures %}
+    <tr><td>
+        <strong>{{ _("Records with errors") }}:</strong>
+        <ul>
+        {% for oai_identifier, summary in report.failures %}
+            <li>
+                <a href="{{ invenio_url_for('administration.oarepo_oaipmh_records_detail', pid_value=oai_identifier) }}">{{ oai_identifier }}</a>:
+                {{ summary }}
+            </li>
+        {% endfor %}
+        </ul>
+        {% if not_listed > 0 %}
+        {{ _("... and %(count)s more.", count=not_listed) }}
+        {% endif %}
+        <a href="{{ failed_records_link }}">{{ _("See all records with errors in the administration.") }}</a>
+    </td></tr>
+    {% endif %}
+    <tr><td style="font-size:smaller">{{ _("This is an auto-generated message sent to the harvest managers of the harvester.") }}</td></tr>
+</table>
+{%- endblock html_body -%}
+
+{%- block plain_body -%}
+{{ _("Harvester") }}: {{ harvester.name }} ({{ harvester.id }})
+{{ _("Started") }}: {{ report.started_at.strftime("%Y-%m-%d %H:%M:%S UTC") }}
+{{ _("Finished") }}: {{ report.finished_at.strftime("%Y-%m-%d %H:%M:%S UTC") }}
+{% if report.error %}
+
+{{ _("The harvest did not finish:") }} {{ report.error }}
+{% endif %}
+
+{{ _("Records processed successfully") }}: {{ report.ok }}
+{{ _("Records with errors") }}: {{ report.failed }}
+{% if report.failures %}
+
+{{ _("Records with errors") }}:
+{% for oai_identifier, summary in report.failures %}
+- {{ oai_identifier }}: {{ summary }}
+  {{ invenio_url_for('administration.oarepo_oaipmh_records_detail', pid_value=oai_identifier) }}
+{% endfor %}
+{% if not_listed > 0 %}
+{{ _("... and %(count)s more.", count=not_listed) }}
+{% endif %}
+
+{{ _("See all records with errors in the administration:") }} {{ failed_records_link }}
+{% endif %}
+
+{{ _("This is an auto-generated message sent to the harvest managers of the harvester.") }}
+{%- endblock plain_body -%}
