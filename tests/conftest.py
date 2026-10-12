@@ -259,6 +259,8 @@ def app_config(app_config, test_model):
     app_config["RDM_ALLOW_METADATA_ONLY_RECORDS"] = True
     app_config["RDM_DEFAULT_FILES_ENABLED"] = False
     app_config["MAIL_DEFAULT_SENDER"] = "harvester@example.org"
+    # UI login redirects to the front page, which needs this invenio-app-rdm setting
+    app_config["THEME_SHOW_FRONTPAGE_INTRO_SECTION"] = False
     return app_config
 
 

@@ -159,7 +159,7 @@ def test_admin_form_text_round_trip(app, db, users):
     assert e.value.messages == {"harvest_managers": {0: {"_schema": ["No user with e-mail nobody@example.org."]}}}
 
 
-def test_about_harvest_page(app, db, harvester):
+def test_about_harvest_page(app, db, harvester, client):
     """The public page lists the harvesters with their configuration and statistics."""
     from datetime import UTC, datetime
 
@@ -180,10 +180,7 @@ def test_about_harvest_page(app, db, harvester):
         )
     db.session.commit()
 
-    from oarepo_oaipmh_harvester.views import about_harvest
-
-    with app.test_request_context("/about/harvest"):
-        html = about_harvest()
+    html = client.get("/about/harvest").get_data(as_text=True)
     assert "Test Harvester" in html
     assert "oai-import{&#34;model&#34;:&#34;test&#34;}" in html
     assert "2025-01-02 03:04 UTC" in html
@@ -193,7 +190,7 @@ def test_about_harvest_page(app, db, harvester):
     assert "/administration/" not in html
 
 
-def test_about_harvest_page_links_for_managers(app, db, harvester, client, user_with_administration_rights):
+def test_about_harvest_page_links_for_managers(app, db, harvester, user_with_administration_rights, client):
     """Users with administration access (or harvest managers) get links to the administration."""
     user_with_administration_rights.login(client)
     html = client.get("/about/harvest").get_data(as_text=True)
