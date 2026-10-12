@@ -36,19 +36,28 @@ from invenio_vocabularies.datastreams.factories import (
 )
 from invenio_vocabularies.datastreams.transformers import BaseTransformer
 from invenio_vocabularies.datastreams.writers import BaseWriter
-from oaipmh_scythe.models import Record as OAIRecord
 
 if TYPE_CHECKING:
     from invenio_vocabularies.datastreams.datastreams import StreamEntry
 
 
-def _oai_record(entry: Any) -> OAIRecord | None:
-    """Return the OAI record of a read (`record`) or transformed (`oai_record`) entry."""
-    if not isinstance(entry, dict):
-        return None
-    for key in ("oai_record", "record"):
-        if isinstance(entry.get(key), OAIRecord):
-            return entry[key]
+def _is_oai_record(value: Any) -> bool:
+    """Return whether the value looks like an OAI record (has `header.identifier`)."""
+    return getattr(getattr(value, "header", None), "identifier", None) is not None
+
+
+def _oai_record(entry: Any) -> Any:
+    """Return the OAI record of an entry, or `None`.
+
+    Readers yield either the record itself or `{"record": <record>}` (the invenio OAI-PMH
+    reader); transformed entries keep it in `oai_record`.
+    """
+    if _is_oai_record(entry):
+        return entry
+    if isinstance(entry, dict):
+        for key in ("oai_record", "record"):
+            if _is_oai_record(entry.get(key)):
+                return entry[key]
     return None
 
 
@@ -80,7 +89,7 @@ class CatchingTransformer(BaseTransformer):
         return result
 
 
-def _failed(stream_entry: StreamEntry, oai_record: OAIRecord | None, exc: Exception) -> StreamEntry:
+def _failed(stream_entry: StreamEntry, oai_record: Any, exc: Exception) -> StreamEntry:
     """Mark the entry as failed with the exception; it is still passed to the writers."""
     stream_entry.exc = exc
     stream_entry.errors = []

@@ -7,9 +7,10 @@ Datastream configuration: `oai-service{model:"<model>", ...}`, see
 [OAIServiceWriter][oarepo_oaipmh_harvester.writers.oai_service.OAIServiceWriter] for the
 options.
 
-Entries that failed to be transformed (`errors` / `exc` set, see
-[CatchingTransformer][oarepo_oaipmh_harvester.datastream.CatchingTransformer]) are not written - only
-their errors are stored on the harvest record, the local record is left as it is.
+The writer expects entries `{"record": <data for the service or None>, "oai_record":
+<OAI record>}`. How to produce them, what is stored on the harvest record and how
+failures are reported is described in
+[Readers, transformers and writers](../../readers-transformers-writers.md).
 
 For each harvested entry the writer
 
@@ -95,6 +96,16 @@ if TYPE_CHECKING:
 
 
 MAX_TRACEBACK_VARIABLE_LENGTH = 100
+MAX_SHORT_ERROR_LENGTH = 200
+
+
+def _short_error(error: dict) -> str:
+    """One-line, truncated description of a stored error for the log."""
+    location = error.get("location") if error.get("type") == "validation_error" else None
+    text = " ".join(
+        f"{error.get('type', 'error')}: {f'{location}: ' if location else ''}{error.get('message', '')}".split()
+    )
+    return text if len(text) <= MAX_SHORT_ERROR_LENGTH else text[: MAX_SHORT_ERROR_LENGTH - 3] + "..."
 
 
 def _utc_datestamp(datestamp: str | dt.datetime) -> dt.datetime:
@@ -370,7 +381,7 @@ class OAIServiceWriter(BaseWriter):
 
         # In case of exception, the session has been rolled back in the lines
         # above, so we can safely proceed to store the OAI record
-        self._store_oai_record(
+        stored_errors = self._store_oai_record(
             oai_record,
             oai_identifier,
             oai_datestamp,
@@ -383,6 +394,16 @@ class OAIServiceWriter(BaseWriter):
             exception_raised,
             written_data,
         )
+        if stored_errors:
+            current_app.logger.info(
+                "OAI identifier %s: %s error(s) stored on the harvest record: %s",
+                oai_identifier,
+                len(stored_errors),
+                "; ".join(_short_error(error) for error in stored_errors),
+            )
+        if exception_raised is not None and stream_entry.exc is None:
+            # report the failure to the datastream as well, not only on the oai record
+            stream_entry.exc = exception_raised
 
         # the datastream api expects error messages; structured errors are on the oai record
         stream_entry.errors = [
@@ -590,8 +611,8 @@ class OAIServiceWriter(BaseWriter):
         validation_errors: list[dict],
         exception_raised: Exception | None,
         written_data: dict | None,
-    ) -> None:
-        """Create or update the OAIHarvestedRecord instance."""
+    ) -> list[dict]:
+        """Create or update the OAIHarvestedRecord instance, return the stored errors."""
         if not oai_record:
             oai_record = OAIHarvestedRecord(
                 oai_identifier=oai_identifier,
@@ -629,6 +650,7 @@ class OAIServiceWriter(BaseWriter):
         db.session.commit()
 
         current_oai_record_service.indexer.bulk_index([oai_record.oai_identifier])
+        return oai_record.errors
 
     def _write(
         self,
