@@ -61,6 +61,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, cast, override
 
+import marshmallow as ma
 from flask import current_app
 from invenio_access.permissions import system_identity
 from invenio_communities.proxies import current_communities
@@ -73,6 +74,7 @@ from invenio_rdm_records.records.systemfields.deletion_status import RecordDelet
 from invenio_records.dictutils import dict_lookup
 from invenio_records_resources.services.uow import RecordIndexOp
 from invenio_vocabularies.datastreams.writers import BaseWriter
+from marshmallow.exceptions import SCHEMA
 from oarepo_runtime import current_runtime
 from sqlalchemy.exc import NoResultFound
 
@@ -98,6 +100,27 @@ if TYPE_CHECKING:
 
 MAX_TRACEBACK_VARIABLE_LENGTH = 100
 MAX_SHORT_ERROR_LENGTH = 200
+
+
+def _flatten_messages(messages: Any, field: str = "") -> Generator[tuple[str, str]]:
+    """Yield `(field path, message)` pairs of (possibly nested) validation messages.
+
+    Handles a message string, lists of messages, marshmallow's nested `{field: messages}`
+    dicts (`_schema` meaning the record itself) and rdm's `{"field": ..., "messages": ...}`
+    entries.
+    """
+    if isinstance(messages, dict):
+        if "messages" in messages and "field" in messages:
+            yield from _flatten_messages(messages["messages"], str(messages["field"]))
+            return
+        for key, value in messages.items():
+            path = field if key == SCHEMA or key is None else f"{field}.{key}" if field else str(key)
+            yield from _flatten_messages(value, path)
+    elif isinstance(messages, list | tuple):
+        for message in messages:
+            yield from _flatten_messages(message, field)
+    else:
+        yield field, str(messages) or "Unknown error (no message)"
 
 
 def _short_error(error: dict) -> str:
@@ -623,12 +646,12 @@ class OAIServiceWriter(BaseWriter):
         oai_record.deleted = oai_deleted
         # store errors and warnings
         # build the list before assigning - in-place append on a JSON column is not persisted
-        errors = [self._convert_stream_error(e) for e in (stream_entry.errors or [])]
+        errors = [x for e in (stream_entry.errors or []) for x in self._convert_stream_error(e)]
         errors.extend(validation_errors)
         if exception_raised is not None:
-            errors.append(self._convert_exception_to_error_dict(exception_raised))
+            errors.extend(self._convert_exception_to_errors(exception_raised))
         if stream_entry.exc:
-            errors.append(self._convert_exception_to_error_dict(stream_entry.exc))
+            errors.extend(self._convert_exception_to_errors(stream_entry.exc))
         oai_record.errors = json.loads(json.dumps(errors, default=str))
         oai_record.harvested_at = harvested_at
         oai_record.has_errors = bool(oai_record.errors)
@@ -773,6 +796,26 @@ class OAIServiceWriter(BaseWriter):
         # For now, just call write() for each entry
         return [self.write(stream_entry, *args, **kwargs) for stream_entry in stream_entries]
 
+    def _convert_exception_to_errors(self, exception: Exception) -> list[dict]:
+        """Turn an exception into error dicts (type, message, location).
+
+        Validation exceptions (marshmallow `ValidationError`, rdm
+        `ValidationErrorWithMessageAsList`) carry structured `messages` - their `str()` is
+        the repr of a list or dict. They give one error per message with the field path as
+        the location, like the validation errors returned by the service. Other exceptions
+        give a single error with the message and a trimmed traceback with the locals of each
+        frame as the location.
+        """
+        messages = getattr(exception, "messages", None)
+        if messages:
+            if isinstance(exception, ma.ValidationError):
+                messages = exception.normalized_messages()
+            return [
+                {"type": type(exception).__name__, "message": message, "location": field}
+                for field, message in _flatten_messages(messages)
+            ]
+        return [self._convert_exception_to_error_dict(exception)]
+
     def _convert_exception_to_error_dict(self, exception: Exception) -> dict:
         """Turn an exception into an error dict with a trimmed traceback and its locals."""
         tb = exception.__traceback__
@@ -798,24 +841,22 @@ class OAIServiceWriter(BaseWriter):
             "location": "\n".join(formatted_tb),
         }
 
-    def _convert_stream_error(self, error: Any) -> dict:
-        """Normalize a stream error (dict, exception or other) into an error dict."""
+    def _convert_stream_error(self, error: Any) -> list[dict]:
+        """Normalize a stream error (dict, exception or other) into error dicts."""
         if isinstance(error, dict):
-            return error
+            return [error]
         if isinstance(error, Exception):
-            return self._convert_exception_to_error_dict(error)
-        return {"message": str(error) or "Unknown error (no message)"}
+            return self._convert_exception_to_errors(error)
+        return [{"message": str(error) or "Unknown error (no message)"}]
 
     def _convert_to_oai_error(self, error: Any) -> Generator[dict]:
         """Convert a service error to an OAI-PMH error dict (type, location, message)."""
         if not isinstance(error, dict):
             yield {"message": str(error)}
         else:
-            field = error.get("field", "unknown")
-            messages = error.get("messages") or []
-            for message in messages:
+            for field, message in _flatten_messages(error.get("messages") or [], error.get("field", "unknown")):
                 yield {
                     "type": "validation_error",
                     "location": field,
-                    "message": str(message),
+                    "message": message,
                 }
