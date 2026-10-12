@@ -223,6 +223,17 @@ type, message or location - or via `GET /api/oai/harvest/records`.
 The API documentation is generated from the module docstrings; start with the
 `oarepo_oaipmh_harvester` package docstring.
 
+## Custom readers, transformers and writers
+
+Sources that are not plain OAI-PMH endpoints (e.g. a JSON API) or metadata formats your
+model can not import can be harvested with your own reader and/or transformer, and
+additional writers can act on the harvested records. They are ordinary invenio-vocabularies
+datastream classes, registered in `invenio.cfg` and referenced from the harvester's
+`loader`, `transformers` and `writers`. What they receive and must produce, how to report
+an error for a single record without stopping the harvest, and what is stored on the
+harvest record is described, with examples, in
+[Readers, transformers and writers](https://oarepo.github.io/oarepo-oaipmh-harvester/readers-transformers-writers.html).
+
 ## License
 
 Copyright (c) 2025-2026 CESNET z.s.p.o. Released under the MIT License, see

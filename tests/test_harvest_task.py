@@ -75,7 +75,7 @@ def test_start_harvest_via_service(app, db, search_clear, harvester, mocker):
 
 
 def test_harvest_continues_after_record_failure(
-    app, db, search_clear, test_model, test_service, location, harvester, mocker
+    app, db, search_clear, test_model, test_service, location, harvester, mocker, caplog
 ):
     """An exception transforming one record is stored on its harvest record, the harvest goes on."""
     import marshmallow as ma
@@ -110,6 +110,11 @@ def test_harvest_continues_after_record_failure(
     assert other.has_errors is False
     assert other.deleted is True
     assert other.record_pid is not None
+
+    # the failure is logged as such, with a short notice of the stored errors
+    assert "Entry oai:zenodo.org:1: failed: ValidationError" in caplog.text
+    assert "Entry oai:zenodo.org:1: processed successfully" not in caplog.text
+    assert "OAI identifier oai:zenodo.org:1: 1 error(s) stored on the harvest record: ValidationError" in caplog.text
 
 
 def test_transformer_errors_without_exception_are_stored(

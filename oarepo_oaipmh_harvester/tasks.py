@@ -43,6 +43,7 @@ from oarepo_oaipmh_harvester.oai_harvester.api import OAIHarvesterAggregate
 from oarepo_oaipmh_harvester.oai_harvester.models import OAIHarvester
 
 _SECONDS_GRANULARITY = "YYYY-MM-DDThh:mm:ssZ"
+MAX_LOGGED_ERROR_LENGTH = 300
 
 
 @lru_cache(maxsize=32)
@@ -112,7 +113,14 @@ def harvest_oaipmh_records(
         oai_record = _entry.entry.get("oai_record") if isinstance(_entry.entry, dict) else None
         oai_identifier = oai_record.header.identifier if oai_record is not None else "<unknown>"
         if _entry.errors or _entry.exc:
-            current_app.logger.error("Entry %s: errors: %s %s", oai_identifier, _entry.errors, _entry.exc or "")
+            problems = [
+                *map(str, _entry.errors),
+                *([f"{type(_entry.exc).__name__}: {_entry.exc}"] if _entry.exc else []),
+            ]
+            summary = " ".join("; ".join(problems).split())
+            if len(summary) > MAX_LOGGED_ERROR_LENGTH:
+                summary = summary[: MAX_LOGGED_ERROR_LENGTH - 3] + "..."
+            current_app.logger.error("Entry %s: failed: %s", oai_identifier, summary)
         else:
             current_app.logger.info("Entry %s: processed successfully", oai_identifier)
 

@@ -11,6 +11,10 @@ otherwise its string serialization (`deserialize`). Deleted OAI records pass thr
 with `record = None`.
 
 Datastream configuration: `oai-import{model:"<model name>"}`.
+
+If the deserializer raises (e.g. a marshmallow `ValidationError`), the record fails - the
+error is stored on its harvest record and the harvest goes on. See
+[Readers, transformers and writers](../../readers-transformers-writers.md#using-oai-import) for an example.
 """
 
 from __future__ import annotations
