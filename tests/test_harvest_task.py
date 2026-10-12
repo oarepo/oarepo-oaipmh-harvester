@@ -265,7 +265,7 @@ def test_harvest_modified_records_only(app, db, search_clear, harvester, mocker)
     delay.assert_called_once_with(harvester_id=harvester, since="2025-01-05T00:00:00+00:00")
 
 
-def test_harvest_action_payload(app, db, search_clear, harvester, client, user_with_administration_rights, mocker):
+def test_harvest_action_payload(app, db, search_clear, harvester, user_with_administration_rights, client, mocker):
     """The administration "Run" action posts `all_records`; without a payload everything is harvested."""
     delay = mocker.patch("oarepo_oaipmh_harvester.tasks.harvest_oaipmh_records.delay")
     user_with_administration_rights.api_login(client)
