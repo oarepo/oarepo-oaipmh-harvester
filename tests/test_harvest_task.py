@@ -204,7 +204,7 @@ def test_harvest_report_is_mailed_to_managers(
 
     def failing_apply(self, stream_entry, *args, **kwargs):
         if stream_entry.entry["record"].header.identifier == "oai:zenodo.org:1":
-            raise ValueError("broken metadata")
+            raise ValueError("broken <b>metadata</b>")
         return original_apply(self, stream_entry, *args, **kwargs)
 
     mocker.patch.object(OAIImportTransformer, "apply", failing_apply)
@@ -216,7 +216,10 @@ def test_harvest_report_is_mailed_to_managers(
     mail = outbox[0]
     assert mail.recipients == [users[0].email]
     assert mail.subject == "Harvest of Test Harvester finished with 2 failed and 2 ok record(s)"
-    assert "oai:zenodo.org:1: ValueError: broken metadata" in mail.body
+    assert "oai:zenodo.org:1: ValueError: broken <b>metadata</b>" in mail.body
+    # values come from harvested data - escaped in the html part
+    assert "broken &lt;b&gt;metadata&lt;/b&gt;" in mail.html
+    assert "<b>metadata</b>" not in mail.html
     assert "/oarepo/harvest/records/oai:zenodo.org:1" in mail.html
     assert "Records processed successfully: 2" in mail.body
 

@@ -22,6 +22,8 @@
 {%- endblock subject -%}
 
 {%- block html_body -%}
+{#- .jinja templates are not autoescaped by flask; values (error messages) come from harvested data -#}
+{%- autoescape true -%}
 <table style="font-family:'Lato',Helvetica,Arial,sans-serif;border-spacing:15px">
     <tr><td>
         {{ _("Harvester") }}: <strong>{{ harvester.name }}</strong> ({{ harvester.id }})<br>
@@ -54,6 +56,7 @@
     {% endif %}
     <tr><td style="font-size:smaller">{{ _("This is an auto-generated message sent to the harvest managers of the harvester.") }}</td></tr>
 </table>
+{%- endautoescape -%}
 {%- endblock html_body -%}
 
 {%- block plain_body -%}
