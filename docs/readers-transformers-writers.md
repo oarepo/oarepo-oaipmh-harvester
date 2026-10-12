@@ -322,9 +322,13 @@ Every harvested OAI identifier has a harvest record
 
 - validation errors reported by the model's service - `type` is `validation_error`,
   `location` the field and `message` the message;
-- exceptions raised by a transformer or while writing - `type` is the exception class,
-  `message` its text and `location` a trimmed traceback with the local variables of each
-  frame;
+- validation exceptions raised by a transformer or while writing (marshmallow
+  `ValidationError`, e.g. from a deserializer or from publishing) - one error per
+  message, `type` is the exception class, `message` the message and `location` the field
+  path (`metadata.terms_of_use.license`);
+- other exceptions raised by a transformer or while writing - `type` is the exception
+  class, `message` its text (`<class> (no message)` if empty) and `location` a trimmed
+  traceback with the local variables of each frame;
 - errors reported by the datastream as strings - only `message`.
 
 A record with `has_errors` is written again by the next harvest even if its datestamp did

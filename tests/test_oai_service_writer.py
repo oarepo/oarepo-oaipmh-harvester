@@ -478,6 +478,43 @@ def test_exception_without_message_gets_placeholder():
     try:
         raise KeyError
     except KeyError as e:
-        error = writer._convert_exception_to_error_dict(e)
+        (error,) = writer._convert_exception_to_errors(e)
     assert error["type"] == "KeyError"
     assert error["message"] == "KeyError (no message)"
+
+
+@pytest.mark.parametrize(
+    ("exception", "expected"),
+    [
+        (
+            # str() of this one is "['Missing uploaded files...']"
+            __import__("marshmallow").ValidationError(["Missing uploaded files."], field_name="files.enabled"),
+            [("files.enabled", "Missing uploaded files.")],
+        ),
+        (
+            __import__("marshmallow").ValidationError({"metadata": {"terms_of_use": {"license": ["Missing iri"]}}}),
+            [("metadata.terms_of_use.license", "Missing iri")],
+        ),
+        (
+            __import__("marshmallow").ValidationError("Plain message"),
+            [("", "Plain message")],
+        ),
+        (
+            __import__(
+                "invenio_rdm_records.services.errors", fromlist=["ValidationErrorWithMessageAsList"]
+            ).ValidationErrorWithMessageAsList([{"field": "metadata.title", "messages": ["Too short.", "Missing."]}]),
+            [("metadata.title", "Too short."), ("metadata.title", "Missing.")],
+        ),
+    ],
+)
+def test_validation_exception_gives_error_per_message(exception, expected):
+    writer = OAIServiceWriter.__new__(OAIServiceWriter)
+    errors = writer._convert_exception_to_errors(exception)
+    assert [(e["location"], e["message"]) for e in errors] == expected
+    assert all(e["type"] == type(exception).__name__ for e in errors)
+
+
+def test_service_validation_error_with_string_messages():
+    writer = OAIServiceWriter.__new__(OAIServiceWriter)
+    errors = list(writer._convert_to_oai_error({"field": "files", "messages": "Not a list"}))
+    assert errors == [{"type": "validation_error", "location": "files", "message": "Not a list"}]
