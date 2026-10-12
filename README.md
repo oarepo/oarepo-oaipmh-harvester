@@ -197,6 +197,13 @@ local record identifier and the errors of the last write. Browse them in
 *Administration → OAI-PMH Harvester Records* - filter by harvester, deleted flag, error
 type, message or location - or via `GET /api/oai/harvest/records`.
 
+When a harvest ends (or fails), the harvester's harvest managers get an e-mail with the
+number of successful and failed records and links to the first 100 failed ones in the
+administration. The mail is rendered from the
+`oarepo_oaipmh_harvester/harvest_report.jinja` template (blocks `subject`, `html_body`,
+`plain_body`); put a template with the same name into your instance's `templates` folder
+to change it.
+
 ## Permissions
 
 - repository administrators can manage all harvesters and see all harvest records;

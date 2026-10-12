@@ -258,6 +258,7 @@ def app_config(app_config, test_model):
     app_config["RDM_USER_MODERATION_ENABLED"] = False
     app_config["RDM_ALLOW_METADATA_ONLY_RECORDS"] = True
     app_config["RDM_DEFAULT_FILES_ENABLED"] = False
+    app_config["MAIL_DEFAULT_SENDER"] = "harvester@example.org"
     return app_config
 
 

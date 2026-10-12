@@ -177,3 +177,55 @@ def test_writer_exception_does_not_stop_harvest(
     other = _db.session.query(OAIHarvestedRecord).filter_by(oai_identifier="oai:zenodo.org:2").one()
     assert other.has_errors is False
     assert other.deleted is True
+
+
+def test_harvest_report_is_mailed_to_managers(
+    app, db, search_clear, test_model, test_service, location, harvester, users, mocker
+):
+    """The harvest managers get a mail with the counts and links to the failed records."""
+    from invenio_access.permissions import system_identity as _system_identity
+
+    from oarepo_oaipmh_harvester.proxies import current_oai_harvester_service
+    from oarepo_oaipmh_harvester.transformers.oai_import import OAIImportTransformer
+
+    current_oai_harvester_service.update(
+        _system_identity,
+        harvester,
+        {
+            **current_oai_harvester_service.read(_system_identity, harvester).to_dict(),
+            "harvest_managers": [{"user": str(users[0].id)}],
+        },
+    )
+    mocker.patch(
+        "oaipmh_scythe.client.Scythe._request",
+        side_effect=OAIPMHResponses(Path(__file__).parent / "oai_responses"),
+    )
+    original_apply = OAIImportTransformer.apply
+
+    def failing_apply(self, stream_entry, *args, **kwargs):
+        if stream_entry.entry["record"].header.identifier == "oai:zenodo.org:1":
+            raise ValueError("broken metadata")
+        return original_apply(self, stream_entry, *args, **kwargs)
+
+    mocker.patch.object(OAIImportTransformer, "apply", failing_apply)
+
+    with app.extensions["mail"].record_messages() as outbox:
+        harvest_oaipmh_records(harvester_id=harvester, since=None, batch_size=1)
+
+    assert len(outbox) == 1
+    mail = outbox[0]
+    assert mail.recipients == [users[0].email]
+    assert mail.subject == "Harvest of Test Harvester finished with 2 failed and 2 ok record(s)"
+    assert "oai:zenodo.org:1: ValueError: broken metadata" in mail.body
+    assert "/oarepo/harvest/records/oai:zenodo.org:1" in mail.html
+    assert "Records processed successfully: 2" in mail.body
+
+
+def test_no_report_without_managers(app, db, search_clear, test_model, location, harvester, mocker):
+    mocker.patch(
+        "oaipmh_scythe.client.Scythe._request",
+        side_effect=OAIPMHResponses(Path(__file__).parent / "oai_responses"),
+    )
+    with app.extensions["mail"].record_messages() as outbox:
+        harvest_oaipmh_records(harvester_id=harvester, since=None, batch_size=1)
+    assert outbox == []
