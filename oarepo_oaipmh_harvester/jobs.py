@@ -23,6 +23,7 @@ from invenio_db import db
 from invenio_jobs.jobs import JobType
 from invenio_jobs.models import Job
 from invenio_jobs.proxies import current_jobs
+from sqlalchemy import select
 
 from oarepo_oaipmh_harvester.oai_harvester.models import OAIHarvester
 
@@ -119,10 +120,22 @@ def unregister_oaipmh_job(job_id: str) -> None:
 
 
 def register_current_harvesters() -> None:
-    """Register jobs for all harvesters stored in the database."""
+    """Register jobs for all harvesters stored in the database.
+
+    This runs at application creation, often in a process that forks afterwards
+    (celery prefork workers, uWSGI without lazy-apps, gunicorn --preload). The ids
+    are therefore read over a dedicated connection that is invalidated afterwards,
+    so that no open socket is left in the pool for forked processes to inherit
+    and share.
+    """
     try:
-        for harvester in db.session.query(OAIHarvester).all():
-            register_oaipmh_job(harvester.id)
+        with db.engine.connect() as conn:
+            try:
+                harvester_ids = conn.execute(select(OAIHarvester.id)).scalars().all()
+            finally:
+                conn.invalidate()
+        for harvester_id in harvester_ids:
+            register_oaipmh_job(harvester_id)
     # An exception might happen for example during invenio db init when
     # the application is started but the database is not yet initialized.
     # We ignore these exceptions with a general except clause, as different
@@ -134,4 +147,4 @@ def register_current_harvesters() -> None:
     except KeyboardInterrupt:
         raise
     except Exception:  # noqa BLE001 ok here
-        db.session.rollback()
+        pass
