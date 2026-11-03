@@ -576,7 +576,11 @@ class OAIServiceWriter(BaseWriter):
         for community in communities:
             # resolved for each community - adding a subcommunity also adds its parent
             record = cast("RDMRecord", self.service.record_cls.pid.resolve(pid_value))
-            if current_communities.service.record_cls.pid.resolve(community).id in record.parent.communities:
+            try:
+                community_id = current_communities.service.record_cls.pid.resolve(community).id
+            except PersistentIdentifierError as e:
+                raise ValueError(f"Community '{community}' does not exist") from e
+            if community_id in record.parent.communities:
                 continue
             errors = current_rdm_records.record_communities_service.bulk_add(
                 self._identity, community, [pid_value], uow=uow

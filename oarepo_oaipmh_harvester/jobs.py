@@ -70,7 +70,8 @@ class OAIHarvestJob(JobType):
         return {
             "harvester_id": cls.id.replace("harvest_oaipmh_records_", ""),
             "since": since,
-            "oai_ids": kwargs.get("oai_ids"),
+            # run params keep the identifiers comma separated (see the `harvest --use-job` command)
+            "oai_ids": oai_ids.split(",") if (oai_ids := kwargs.get("oai_ids")) else None,
         }
 
 
@@ -107,10 +108,11 @@ def get_oaipmh_job_id(harvester_id: str) -> str:
 
 
 def get_oaipmh_job(harvester_id: str) -> Job:
-    """Get the job for the given harvester ID."""
-    job_type_id = get_oaipmh_job_id(harvester_id)
-    job_type: JobType = current_jobs.registry.get(job_type_id)
-    return db.session.query(Job).filter_by(task=job_type.task).one()
+    """Get the job for the given harvester ID - `Job.task` is the id of the job type."""
+    job = db.session.query(Job).filter_by(task=get_oaipmh_job_id(harvester_id)).first()
+    if job is None:
+        raise LookupError(f"No job for harvester '{harvester_id}', create it in the administration (Jobs).")
+    return job
 
 
 def unregister_oaipmh_job(job_id: str) -> None:

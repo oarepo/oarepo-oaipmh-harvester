@@ -5,10 +5,16 @@ from __future__ import annotations
 
 import pytest
 from invenio_db import db
+from invenio_jobs.models import Job
 from sqlalchemy import event
 from sqlalchemy.pool import QueuePool
 
-from oarepo_oaipmh_harvester.jobs import register_current_harvesters
+from oarepo_oaipmh_harvester.jobs import (
+    OAIHarvestJob,
+    get_oaipmh_job,
+    get_oaipmh_job_id,
+    register_current_harvesters,
+)
 
 
 @pytest.fixture(scope="module")
@@ -47,3 +53,18 @@ def test_register_current_harvesters_leaves_no_pooled_connection(app, database):
         event.remove(pool, "close", on_close)
 
     assert not open_connections
+
+
+def test_get_oaipmh_job(app, db, harvester):
+    with pytest.raises(LookupError):
+        get_oaipmh_job(harvester)
+    job = Job(title="Harvest", task=get_oaipmh_job_id(harvester))
+    db.session.add(job)
+    db.session.commit()
+    assert get_oaipmh_job(harvester).id == job.id
+
+
+def test_build_task_arguments_splits_oai_ids():
+    args = OAIHarvestJob.build_task_arguments(None, oai_ids="oai:a:1,oai:a:2")
+    assert args["oai_ids"] == ["oai:a:1", "oai:a:2"]
+    assert OAIHarvestJob.build_task_arguments(None)["oai_ids"] is None
