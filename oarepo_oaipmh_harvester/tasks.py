@@ -147,6 +147,9 @@ def _harvest(
                 summary = summary[: MAX_LOGGED_ERROR_LENGTH - 3] + "..."
             current_app.logger.error("Entry %s: failed: %s", oai_identifier, summary)
             report.add_failure(oai_identifier, summary)
+        elif _entry.filtered:
+            current_app.logger.info("Entry %s: skipped", oai_identifier)
+            report.add_ok()
         else:
             current_app.logger.info("Entry %s: processed successfully", oai_identifier)
             report.add_ok()
