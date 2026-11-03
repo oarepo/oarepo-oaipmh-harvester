@@ -421,7 +421,7 @@ def test_harvest_unknown_community_is_an_error(
     writer = OAIServiceWriter("rdmtest", publish=True, harvester_id=harvester, community="unknown")
     entry = writer.write(_entry(dt.datetime(2025, 1, 1, tzinfo=dt.UTC), deleted=False, record=rdm_record_data))
     # reported to the datastream as well, not only stored on the oai record
-    assert entry.exc is not None
+    assert str(entry.exc) == "Community 'unknown' does not exist"
     oai_record = _oai_record(db)
     assert oai_record.has_errors is True
     # the whole write was rolled back
