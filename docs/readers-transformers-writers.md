@@ -315,8 +315,8 @@ Every harvested OAI identifier has a harvest record
 | `transformed_data` | `record` as produced by the transformers (values that are not JSON as strings); empty if the record failed in a transformer or was deleted at the source |
 | `record_pid`, `record_type` | pid and model of the local record; kept from the previous harvest when writing fails |
 | `errors` | list of `{"type", "location", "message"}`, see below |
-| `has_errors` | `errors` is not empty |
-| `has_warnings` | always `False` - warnings are not tracked |
+| `has_errors` | `errors` contain an error (an entry other than `skipped`) |
+| `has_warnings` | the record was skipped by a transformer, see [Skipping records](#skipping-records) |
 
 `errors` contain:
 
@@ -331,9 +331,23 @@ Every harvested OAI identifier has a harvest record
   traceback with the local variables of each frame;
 - errors reported by the datastream as strings - only `message`.
 
-A record with `has_errors` is written again by the next harvest even if its datestamp did
-not change. A record without errors whose datestamp did not change is skipped, unless
-the writer has `update_all`.
+A record with `has_errors` or `has_warnings` is written again by the next harvest even if
+its datestamp did not change. A record without errors whose datestamp did not change is
+skipped, unless the writer has `update_all`.
+
+### Skipping records
+
+A transformer can tell `oai-service` not to write a record by setting
+`stream_entry.filtered = True`, optionally with the reason in
+`stream_entry.entry["skip_reason"]`. The local record is left as it is; the harvest
+record is stored with `has_warnings`, a `{"type": "skipped", "message": <reason>}` entry in
+`errors`. The harvest logs `Entry <identifier>: skipped` and counts the record as
+processed. The record is evaluated again by every harvest that reads it.
+
+The `skip-if-owned{model:"<model>"}` transformer uses this for *fallback* harvesters - put
+it last in the chain of a harvester (e.g. DataCite) that should write a record only if no
+other harvester writes the same local pid. See
+[skip-if-owned][oarepo_oaipmh_harvester.transformers.skip_if_owned] for the details.
 
 ## Custom writers
 
@@ -349,7 +363,8 @@ subclasses `invenio_vocabularies.datastreams.writers.BaseWriter` and implements
   `stream_entry.op_type` the
   [Operation][oarepo_oaipmh_harvester.writers.oai_service.Operation] performed. A record
   skipped as up to date has `op_type` `None` and `record` set to the current local
-  record.
+  record. A record skipped by a transformer has `stream_entry.filtered` set, `op_type`
+  `None` and `record` `None`.
 - Check `stream_entry.errors` / `stream_entry.exc` first - a record that failed in a
   transformer or in `oai-service` has them set and was not written.
 - An exception raised by a writer does not stop the harvest (see [Errors](#errors)), but

@@ -46,6 +46,12 @@ Records whose data have no `files` / `media_files` section are written with
 `{"enabled": False}` there (for the sections the model supports) - harvested metadata
 do not bring files.
 
+Entries marked by a transformer with `stream_entry.filtered = True` (e.g. by
+[skip-if-owned][oarepo_oaipmh_harvester.transformers.skip_if_owned]) are not written -
+the local record is left as it is. The harvest record is stored with `has_warnings` and a
+`skipped` entry (the reason from `stream_entry.entry["skip_reason"]`) in `errors`. Such a
+harvest record is never up to date, so the entry is evaluated again by every harvest.
+
 Written records are added to the `community` writer option (slug or id) and to the
 communities listed by the transformer in `parent.communities.ids` of the transformed data.
 They are added directly (rdm `bulk_add`), without a community inclusion request; communities
@@ -101,6 +107,9 @@ if TYPE_CHECKING:
 MAX_TRACEBACK_VARIABLE_LENGTH = 100
 MAX_SHORT_ERROR_LENGTH = 200
 
+SKIP_REASON = "skip_reason"
+"""Key of `stream_entry.entry` with the reason why a filtered entry was not written."""
+
 
 def _flatten_messages(messages: Any, field: str = "") -> Generator[tuple[str, str]]:
     """Yield `(field path, message)` pairs of (possibly nested) validation messages.
@@ -144,6 +153,17 @@ def _utc_datestamp(datestamp: str | dt.datetime) -> dt.datetime:
     if datestamp.tzinfo is None:
         return datestamp.replace(tzinfo=dt.UTC)
     return datestamp.astimezone(dt.UTC)
+
+
+def get_pid_value_from_record(service: RecordService, record_data: dict) -> str | None:
+    """Read the pid value from (not yet written) record data via the pid provider, if it supports it."""
+    pid_field = getattr(service.record_cls.pid, "field", None)
+    pid_provider = getattr(pid_field, "_provider", None) if pid_field else None
+    get_pid_value = getattr(pid_provider, "get_pid_value_from_record", None) if pid_provider else None
+    pid_type = getattr(pid_field, "_pid_type", None) if pid_field else None
+    if get_pid_value and pid_type:
+        return get_pid_value(record_data)
+    return None
 
 
 class LocalState(StrEnum):
@@ -364,16 +384,21 @@ class OAIServiceWriter(BaseWriter):
         validation_errors: list[dict] = []
         exception_raised = None
         op_type = None
+        skip_reason = None
 
         try:
             if stream_entry.errors or stream_entry.exc is not None:
                 # reading / transformation failed - only the errors are stored on the oai
                 # record, the local record is left as it is
                 current_app.logger.debug("Not writing OAI identifier %s, it has errors", oai_identifier)
+            elif stream_entry.filtered:
+                # a transformer decided not to write the record - the local record is left as it is
+                skip_reason = stream_entry.entry.get(SKIP_REASON) or "Skipped by a transformer"
+                current_app.logger.info("Not writing OAI identifier %s: %s", oai_identifier, skip_reason)
             else:
                 pid_value = oai_record.record_pid if oai_record else None
                 if not pid_value and not oai_deleted:
-                    pid_value = self._get_pid_value_from_record(transformed_data)
+                    pid_value = get_pid_value_from_record(self.service, transformed_data)
 
                 # 2. find out the state of the local record
                 local = LocalRecord.resolve(self.service, pid_value, with_drafts=self._publish)
@@ -417,6 +442,7 @@ class OAIServiceWriter(BaseWriter):
             validation_errors,
             exception_raised,
             written_data,
+            skip_reason=skip_reason,
         )
         if stored_errors:
             current_app.logger.info(
@@ -611,17 +637,6 @@ class OAIServiceWriter(BaseWriter):
                 return True
         return False
 
-    def _get_pid_value_from_record(self, record_data: dict) -> str | None:
-        """Read the pid value from the transformed data via the pid provider, if it supports it."""
-        pid_field = getattr(self.service.record_cls.pid, "field", None)
-        pid_provider = getattr(pid_field, "_provider", None) if pid_field else None
-        get_pid_value_from_record = getattr(pid_provider, "get_pid_value_from_record", None) if pid_provider else None
-        pid_type = getattr(pid_field, "_pid_type", None) if pid_field else None
-        if get_pid_value_from_record and pid_type:
-            # try to get pid value from transformed data
-            return get_pid_value_from_record(record_data)
-        return None
-
     def _store_oai_record(  # noqa PLR0913,PLR0917
         self,
         oai_record: OAIHarvestedRecord | None,
@@ -635,8 +650,14 @@ class OAIServiceWriter(BaseWriter):
         validation_errors: list[dict],
         exception_raised: Exception | None,
         written_data: dict | None,
+        *,
+        skip_reason: str | None = None,
     ) -> list[dict]:
-        """Create or update the OAIHarvestedRecord instance, return the stored errors."""
+        """Create or update the OAIHarvestedRecord instance, return the stored errors.
+
+        A skipped entry (`skip_reason`) is stored as a warning - a `skipped` entry in `errors`
+        with `has_warnings` set, `has_errors` stays `False`. It is not returned.
+        """
         if not oai_record:
             oai_record = OAIHarvestedRecord(
                 oai_identifier=oai_identifier,
@@ -652,11 +673,11 @@ class OAIServiceWriter(BaseWriter):
             errors.extend(self._convert_exception_to_errors(exception_raised))
         if stream_entry.exc:
             errors.extend(self._convert_exception_to_errors(stream_entry.exc))
-        oai_record.errors = json.loads(json.dumps(errors, default=str))
+        warnings = [{"type": "skipped", "location": "", "message": skip_reason}] if skip_reason else []
+        oai_record.errors = json.loads(json.dumps([*errors, *warnings], default=str))
         oai_record.harvested_at = harvested_at
-        oai_record.has_errors = bool(oai_record.errors)
-        # no warnings tracking for now
-        oai_record.has_warnings = False
+        oai_record.has_errors = bool(errors)
+        oai_record.has_warnings = bool(warnings)
 
         # store the internal identifier
         # written_entry.entry is a RecordItem from the service, not plain record
@@ -683,7 +704,7 @@ class OAIServiceWriter(BaseWriter):
                 "Could not index harvest record %s, queued for bulk indexing", oai_record.oai_identifier
             )
             current_oai_record_service.indexer.bulk_index([oai_record.oai_identifier])
-        return oai_record.errors
+        return errors
 
     def _write(
         self,

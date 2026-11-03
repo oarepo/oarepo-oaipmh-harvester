@@ -11,11 +11,12 @@ from invenio_i18n import lazy_gettext as _
 
 from oarepo_oaipmh_harvester.oai_harvester import facets
 from oarepo_oaipmh_harvester.oai_record import facets as record_facets
-from oarepo_oaipmh_harvester.transformers import OAIImportTransformer
+from oarepo_oaipmh_harvester.transformers import OAIImportTransformer, SkipIfOwnedTransformer
 from oarepo_oaipmh_harvester.writers import OAIServiceWriter
 
 VOCABULARIES_DATASTREAM_TRANSFORMERS = {
     "oai-import": OAIImportTransformer,
+    "skip-if-owned": SkipIfOwnedTransformer,
 }
 
 VOCABULARIES_DATASTREAM_WRITERS = {
