@@ -127,7 +127,17 @@ invenio oai harvest zenodo                              # full harvest, in this 
 invenio oai harvest zenodo --since 2025-01-01           # records changed since a date
 invenio oai harvest zenodo oai:zenodo.org:123 oai:...   # selected records only
 invenio oai harvest zenodo --use-job                    # run it as an invenio-jobs job (Celery)
+invenio oai harvest zenodo --parallel                   # the same, split into parallel windows
 ```
+
+### Parallel harvest
+
+A `--parallel` harvest (or a job run with *parallel* checked in the run form) harvests
+**everything**, split into time windows harvested at the same time as subtask runs of the
+job run - meant for the first harvest of a large source, see
+[Parallel harvest of a large source](docs/readers-transformers-writers.md#parallel-harvest-of-a-large-source)
+for the details, the worker queue and the caveats. It needs a job for the harvester and
+rejects `--since` and identifiers.
 
 Scheduled harvesting uses [invenio-jobs](https://github.com/inveniosoftware/invenio-jobs):
 
@@ -152,6 +162,7 @@ Writes the harvested records through the target model's service. Options:
 | `update_all` | `false` | rewrite every record, even if unchanged since the last harvest |
 | `pid_field` | `"id"` | where the record's pid value is in the service result |
 | `community` | - | slug (or id) of a community every written record is added to. Only for RDM models. |
+| `sync_index` | `true` | index each harvest record right away; `false` queues it for bulk indexing (faster for large harvests, the administration lags behind) |
 
 ### Communities
 
@@ -216,6 +227,10 @@ to change it.
 | Variable | Default | Meaning |
 |---|---|---|
 | `OAI_HARVESTER_DEFAULT_BATCH_SIZE` | `1` | records per datastream batch |
+| `OAI_HARVESTER_PARALLEL_TARGET_SIZE` | `20000` | records per window of a parallel harvest |
+| `OAI_HARVESTER_PARALLEL_FIXED_WINDOW` | `"1d"` | window length when the source does not report the number of records |
+| `OAI_HARVESTER_PARALLEL_MAX_WINDOWS` | `2000` | a parallel harvest never creates more windows |
+| `OAI_HARVESTER_WINDOW_QUEUE` | `"low"` | Celery queue for the window tasks of a parallel harvest; `None` is the default queue |
 | `OAI_HARVESTER_SEARCH`, `OAI_HARVESTER_FACETS`, `OAI_HARVESTER_SORT_OPTIONS` | | search of harvesters |
 | `OAI_RECORD_SEARCH`, `OAI_RECORD_FACETS`, `OAI_RECORD_SORT_OPTIONS` | | search of harvest records |
 

@@ -12,7 +12,9 @@
 {% set not_listed = report.failed - report.failures|length %}
 
 {%- block subject -%}
-{% if report.error %}
+{% if report.stopped %}
+{{ _("Harvest of %(name)s was stopped", name=harvester.name) }}
+{% elif report.error %}
 {{ _("Harvest of %(name)s failed", name=harvester.name) }}
 {% elif report.failed %}
 {{ _("Harvest of %(name)s finished with %(failed)s failed and %(ok)s ok record(s)", name=harvester.name, failed=report.failed, ok=report.ok) }}

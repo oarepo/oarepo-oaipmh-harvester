@@ -18,6 +18,10 @@ placing its own copy into its `templates/oarepo_oaipmh_harvester/` folder. It ge
 
 The mail is sent (via the `invenio_mail` celery task) only if the harvester has harvest
 managers; it goes to their e-mail addresses.
+
+A parallel harvest sends one report for the whole run, built from the run counters by
+[HarvestReport.from_run][oarepo_oaipmh_harvester.report.HarvestReport.from_run], when its
+last window finishes.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 
 from flask import Blueprint, Flask, current_app
 from invenio_accounts.models import User
+from invenio_jobs.models import Run, RunStatusEnum
 from invenio_mail.tasks import send_email
 
 if TYPE_CHECKING:
@@ -47,10 +52,16 @@ class HarvestReport:
     finished_at: dt.datetime | None = None
     ok: int = 0
     failed: int = 0
+    created: int = 0
+    """Records created locally (used by the run counters of a parallel harvest)."""
+    updated: int = 0
+    """Records updated locally (used by the run counters of a parallel harvest)."""
     failures: list[tuple[str, str]] = field(default_factory=list)
     """`(oai identifier, error summary)` of the first `MAX_REPORTED_FAILURES` failed records."""
     error: str | None = None
     """Error that stopped the whole harvest, if any."""
+    stopped: bool = False
+    """Whether the harvest (a parallel run) was stopped before it finished."""
 
     def add_ok(self) -> None:
         """Count a successfully processed record."""
@@ -62,9 +73,54 @@ class HarvestReport:
         if len(self.failures) < MAX_REPORTED_FAILURES:
             self.failures.append((oai_identifier, summary))
 
+    @classmethod
+    def from_run(cls, harvester: OAIHarvesterAggregate, parent_run: Run) -> HarvestReport:
+        """Report of a parallel harvest - counts from the job run, failures from the harvest records.
+
+        Skipped records (already up to date) do not touch their harvest record, so the run
+        counters, not the stored records, are the source of truth for the counts.
+        """
+        from oarepo_oaipmh_harvester.oai_record.models import OAIHarvestedRecord
+        from oarepo_oaipmh_harvester.writers.oai_service import short_error
+
+        started_at = parent_run.started_at or parent_run.created
+        finished_at = parent_run.finished_at or dt.datetime.now(dt.UTC)
+        report = cls(
+            started_at=started_at,
+            finished_at=finished_at,
+            failed=parent_run.errored_entries,
+            ok=max(parent_run.total_entries - parent_run.errored_entries, 0),
+        )
+        failed_records = (
+            OAIHarvestedRecord.query.filter(
+                OAIHarvestedRecord.harvester_id == harvester.id,
+                OAIHarvestedRecord.has_errors.is_(True),
+                OAIHarvestedRecord.harvested_at >= started_at,
+                OAIHarvestedRecord.harvested_at <= finished_at,
+            )
+            .order_by(OAIHarvestedRecord.harvested_at)
+            .limit(MAX_REPORTED_FAILURES)
+        )
+        # the same one-line summary of a stored error the writer logs
+        report.failures = [
+            (record.oai_identifier, short_error(record.errors[0])) for record in failed_records if record.errors
+        ]
+        failed_windows = Run.query.filter_by(parent_run_id=parent_run.id, status=RunStatusEnum.FAILED).all()
+        if failed_windows:
+            report.error = "Records of these time windows were not fully harvested: " + ", ".join(
+                f"{window.args.get('from')} - {window.args.get('until')}" for window in failed_windows
+            )
+        return report
+
 
 def send_harvest_report(harvester: OAIHarvesterAggregate, report: HarvestReport) -> None:
-    """Send the report to the harvest managers of the harvester (if it has any)."""
+    """Send the report to the harvest managers of the harvester (if it has any).
+
+    A harvest that found nothing and did not fail is not reported - a scheduled incremental
+    harvest of an unchanged source would otherwise mail its managers on every run.
+    """
+    if not report.ok and not report.failed and not report.error:
+        return
     user_ids = [manager["user"] for manager in harvester.harvest_managers or []]
     recipients = [user.email for user in User.query.filter(User.id.in_(user_ids)) if user.email] if user_ids else []
     if not recipients:

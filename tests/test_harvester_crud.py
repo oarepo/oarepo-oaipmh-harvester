@@ -28,25 +28,17 @@ def test_harvester_crud(db, app, search, search_clear, user_with_administration_
     harvester = current_oai_harvester_service.create(system_identity, harvester_data)
     current_oai_harvester_service.indexer.refresh()
 
-    created_harvester = harvester.to_dict()
+    def fields(harvester: dict) -> dict:
+        return {key: harvester[key] for key in harvester_data}
 
-    assert created_harvester["name"] == harvester_data["name"]
-    assert created_harvester["base_url"] == harvester_data["base_url"]
-    assert created_harvester["metadata_prefix"] == harvester_data["metadata_prefix"]
-    assert created_harvester["setspec"] == harvester_data["setspec"]
-    assert created_harvester["loader"] == harvester_data["loader"]
-    assert created_harvester["transformers"] == harvester_data["transformers"]
-    assert created_harvester["writers"] == harvester_data["writers"]
-    assert created_harvester["harvest_managers"] == harvester_data["harvest_managers"]
-    assert created_harvester["comment"] == harvester_data["comment"]
+    assert fields(harvester.to_dict()) == harvester_data
 
     # make sure we read the database version, not a cached one
     db.session.expunge_all()
 
     read_harvester = current_oai_harvester_service.read(system_identity, harvester.id)
     read_harvester_dict = read_harvester.to_dict()
-    assert read_harvester_dict["id"] == harvester_data["id"]
-    assert read_harvester_dict["name"] == created_harvester["name"]
+    assert fields(read_harvester_dict) == harvester_data
 
     # use http client to read the harvester
     # we need to merge the user as expunge_all detached it and client depends on it
@@ -54,17 +46,7 @@ def test_harvester_crud(db, app, search, search_clear, user_with_administration_
     user_with_administration_rights.api_login(client)
     response = client.get(f"/api/oai/harvest/harvesters/{harvester.id}")
     assert response.status_code == 200
-    response_data = response.get_json()
-    assert response_data["id"] == harvester_data["id"]
-    assert response_data["name"] == harvester_data["name"]
-    assert response_data["base_url"] == harvester_data["base_url"]
-    assert response_data["metadata_prefix"] == harvester_data["metadata_prefix"]
-    assert response_data["setspec"] == harvester_data["setspec"]
-    assert response_data["loader"] == harvester_data["loader"]
-    assert response_data["transformers"] == harvester_data["transformers"]
-    assert response_data["writers"] == harvester_data["writers"]
-    assert response_data["harvest_managers"] == harvester_data["harvest_managers"]
-    assert response_data["comment"] == harvester_data["comment"]
+    assert fields(response.get_json()) == harvester_data
 
     found_harvesters = current_oai_harvester_service.search(system_identity, {"q": "Test"}).to_dict()
     assert found_harvesters["hits"]["total"] == 1
@@ -159,31 +141,20 @@ def test_admin_form_text_round_trip(app, db, users):
     assert e.value.messages == {"harvest_managers": {0: {"_schema": ["No user with e-mail nobody@example.org."]}}}
 
 
-def test_about_harvest_page(app, db, harvester, client):
+def test_about_harvest_page(app, db, source, harvester, test_model, location, client):
     """The public page lists the harvesters with their configuration and statistics."""
-    from datetime import UTC, datetime
+    import datetime as dt
 
-    from oarepo_oaipmh_harvester.oai_record.models import OAIHarvestedRecord
+    from oarepo_oaipmh_harvester.tasks import harvest_oaipmh_records
 
-    for i, has_errors in enumerate([False, True]):
-        db.session.add(
-            OAIHarvestedRecord(
-                oai_identifier=f"oai:test:{i}",
-                harvester_id=harvester,
-                datestamp=datetime(2025, 1, 1, tzinfo=UTC),
-                harvested_at=datetime(2025, 1, 2, 3, 4, tzinfo=UTC),
-                has_errors=has_errors,
-                errors=[],
-                original_data={},
-                transformed_data={},
-            )
-        )
-    db.session.commit()
+    source.add("2025-01-01T00:00:00Z")
+    source.add("2025-01-02T00:00:00Z", title=["one", "two"])  # not importable - a record with errors
+    harvest_oaipmh_records(harvester_id=harvester)
 
     html = client.get("/about/harvest").get_data(as_text=True)
     assert "Test Harvester" in html
     assert "oai-import{&#34;model&#34;:&#34;test&#34;}" in html
-    assert "2025-01-02 03:04 UTC" in html
+    assert dt.datetime.now(dt.UTC).strftime("%Y-%m-%d") in html  # last harvested
     assert "<th>Records</th><td>2</td>" in html
     assert "<th>Records with errors</th><td>1</td>" in html
     # anonymous - no links to the administration

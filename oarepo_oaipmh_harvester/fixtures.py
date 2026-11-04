@@ -29,8 +29,8 @@ from invenio_db import db
 from invenio_rdm_records.fixtures.fixture import FixtureMixin
 
 from oarepo_oaipmh_harvester.cli import lookup_user
+from oarepo_oaipmh_harvester.pipeline import parse_config
 from oarepo_oaipmh_harvester.proxies import current_oai_harvester_service
-from oarepo_oaipmh_harvester.tasks import parse_config
 
 
 def _with_community(writer: str, community: str) -> str:

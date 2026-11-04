@@ -1,109 +1,87 @@
 # SPDX-FileCopyrightText: 2024-2026 CESNET z.s.p.o
 # SPDX-License-Identifier: MIT
 
-"""Harvest Celery tasks and datastream construction.
+"""Harvest Celery tasks and job types.
 
-[harvest_oaipmh_records][oarepo_oaipmh_harvester.tasks.harvest_oaipmh_records] loads a
-harvester and builds an invenio-vocabularies datastream from it:
-
-* reader - the harvester's `loader` (default `oai-pmh`, the invenio-vocabularies
-  OAI-PMH reader), with `base_url`, `metadata_prefix`, `set`, `from_date`
-  (from `since`, formatted to the granularity the server advertises in `Identify`,
-  see [format_oaipmh_datestamp][oarepo_oaipmh_harvester.tasks.format_oaipmh_datestamp])
-  and `identifiers` filled in unless given in the loader options;
-* transformers and writers - the harvester's `transformers` / `writers`.
-
-Transformers and writers are wrapped by
-[create_datastream][oarepo_oaipmh_harvester.datastream.create_datastream] - a failure of a
-single record is stored on its harvest record and the harvest continues.
-
-Each definition is a string `name{options}` where options are a JSON5 object
-([parse_config][oarepo_oaipmh_harvester.tasks.parse_config]); `harvester_id` is always
-added to the options. The names are looked up in `VOCABULARIES_DATASTREAM_READERS` /
-`_TRANSFORMERS` / `_WRITERS`.
+[harvest_oaipmh_records][oarepo_oaipmh_harvester.tasks.harvest_oaipmh_records] is the task
+behind every harvester's job. It either harvests the records right away - the datastream is
+built from the harvester definition and run by
+[run_harvest][oarepo_oaipmh_harvester.pipeline.run_harvest], see
+[pipeline][oarepo_oaipmh_harvester.pipeline] - or, with `parallel=True`, splits the work into
+time windows harvested at the same time as subtask runs of the job run, see
+[parallel][oarepo_oaipmh_harvester.parallel]. A parallel harvest needs a job run with the
+`parallel` argument set (`invenio oai harvest <id> --parallel` or the run form in
+*Administration -> Jobs*), harvests everything and is only started for the `oai-pmh` loader;
+anything else falls back to the sequential harvest with a warning.
 
 [run_all_harvesters][oarepo_oaipmh_harvester.tasks.run_all_harvesters] (job type
-[RunAllHarvesters][oarepo_oaipmh_harvester.tasks.RunAllHarvesters]) runs a full harvest
-of all harvesters.
+[RunAllHarvesters][oarepo_oaipmh_harvester.tasks.RunAllHarvesters]) runs a full harvest of all
+harvesters.
+
+The datastream helpers ([create_readers][oarepo_oaipmh_harvester.pipeline.create_readers] and
+the rest of [pipeline][oarepo_oaipmh_harvester.pipeline]) used to live in this module and stay
+importable from it; `harvest_window` is imported so that celery registers the window task when
+`invenio_celery.tasks` imports this module.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from functools import lru_cache
-from typing import cast
 
-import json5
 from celery.app import shared_task
 from flask import current_app
 from invenio_jobs.jobs import JobType
 
-from oarepo_oaipmh_harvester.datastream import create_datastream
 from oarepo_oaipmh_harvester.oai_harvester.api import OAIHarvesterAggregate
 from oarepo_oaipmh_harvester.oai_harvester.models import OAIHarvester
+from oarepo_oaipmh_harvester.oai_source import format_oaipmh_datestamp
+from oarepo_oaipmh_harvester.parallel import harvest_window, start_parallel_harvest
+from oarepo_oaipmh_harvester.pipeline import (
+    create_readers,
+    create_transformers,
+    create_writers,
+    parse_config,
+    run_harvest,
+)
 from oarepo_oaipmh_harvester.report import HarvestReport, send_harvest_report
 
-_SECONDS_GRANULARITY = "YYYY-MM-DDThh:mm:ssZ"
-MAX_LOGGED_ERROR_LENGTH = 300
-
-
-@lru_cache(maxsize=32)
-def _oai_granularity(base_url: str) -> str | None:
-    """Return the granularity advertised by the OAI-PMH Identify verb (cached).
-
-    Returns None if the probe fails - callers should fall back to the most
-    restrictive date-only format, which is legal under both granularities.
-    Note: results are cached for the process lifetime, so a granularity change
-    on the server side requires a worker restart to take effect.
-    """
-    try:
-        from oaipmh_scythe import Scythe
-
-        return getattr(Scythe(base_url).identify(), "granularity", None)
-    except Exception:
-        current_app.logger.warning(
-            "Could not probe Identify granularity of %s, assuming date-only", base_url, exc_info=True
-        )
-        return None
-
-
-def format_oaipmh_datestamp(since: datetime | str, base_url: str) -> str:
-    """Format `since` as an OAI-PMH datestamp matching the server granularity.
-
-    OAI-PMH repositories that advertise `YYYY-MM-DD` granularity (e.g. the
-    ASEP ARL server) reject any time component, while `...+00:00` offsets
-    produced by `datetime.isoformat()` are illegal in both granularities.
-    Seconds-granularity servers get `YYYY-MM-DDThh:mm:ssZ` (UTC), others a
-    bare `YYYY-MM-DD`.
-    """
-    if isinstance(since, str):
-        import arrow
-
-        since_dt = arrow.get(since).datetime
-    else:
-        since_dt = since
-
-    if since_dt.utcoffset() is None:
-        since_dt = since_dt.astimezone()  # interpret naive input as local time
-    since_dt = since_dt.astimezone(UTC)
-    if _oai_granularity(base_url) == _SECONDS_GRANULARITY:
-        return since_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-    return since_dt.date().isoformat()
+__all__ = [
+    "RunAllHarvesters",
+    "create_readers",
+    "create_transformers",
+    "create_writers",
+    "format_oaipmh_datestamp",
+    "harvest_oaipmh_records",
+    "harvest_window",
+    "parse_config",
+    "run_all_harvesters",
+    "run_harvest",
+]
 
 
 @shared_task
-def harvest_oaipmh_records(
+def harvest_oaipmh_records(  # noqa: PLR0913 mirrors the task arguments
     *,
     harvester_id: str,
     oai_ids: list[str] | None = None,
     since: datetime | None = None,
+    until: datetime | None = None,
     batch_size: int | None = None,
+    parallel: bool = False,
 ) -> None:
-    """Harvest OAI-PMH records for the given harvester, then mail a report to its harvest managers."""
+    """Harvest OAI-PMH records for the given harvester, then mail a report to its harvest managers.
+
+    `parallel` harvests everything in windows dispatched as subtask runs; it needs to run as a
+    job run and can not select `oai_ids`. Such a harvest returns here - its report is sent by
+    the window that finishes last.
+    """
     harvester = OAIHarvesterAggregate.get_record(harvester_id)
+    if parallel and start_parallel_harvest(harvester, oai_ids):
+        return
+
     report = HarvestReport()
     try:
-        _harvest(harvester, report, oai_ids=oai_ids, since=since, batch_size=batch_size)
+        run_harvest(harvester, report, oai_ids=oai_ids, since=since, until=until, batch_size=batch_size)
     except Exception as e:
         report.error = f"{type(e).__name__}: {e}"
         raise
@@ -114,115 +92,6 @@ def harvest_oaipmh_records(
         except Exception:
             # the report must not hide the harvest's own outcome
             current_app.logger.exception("Could not send the report of harvester %s", harvester_id)
-
-
-def _harvest(
-    harvester: OAIHarvesterAggregate,
-    report: HarvestReport,
-    *,
-    oai_ids: list[str] | None,
-    since: datetime | None,
-    batch_size: int | None,
-) -> None:
-    """Run the harvest, recording the outcome of every record in the report."""
-    readers_config = create_readers(harvester, since=since, oai_ids=oai_ids)
-    transformers_config = create_transformers(harvester)
-    writers_config = create_writers(harvester)
-    datastream = create_datastream(
-        readers_config=[readers_config],
-        transformers_config=transformers_config,
-        writers_config=writers_config,
-        batch_size=batch_size or current_app.config["OAI_HARVESTER_DEFAULT_BATCH_SIZE"],
-    )
-    for _entry in datastream.process():
-        oai_record = _entry.entry.get("oai_record") if isinstance(_entry.entry, dict) else None
-        oai_identifier = oai_record.header.identifier if oai_record is not None else "<unknown>"
-        if _entry.errors or _entry.exc:
-            problems = [
-                *map(str, _entry.errors),
-                *([f"{type(_entry.exc).__name__}: {_entry.exc}"] if _entry.exc else []),
-            ]
-            summary = " ".join("; ".join(problems).split())
-            if len(summary) > MAX_LOGGED_ERROR_LENGTH:
-                summary = summary[: MAX_LOGGED_ERROR_LENGTH - 3] + "..."
-            current_app.logger.error("Entry %s: failed: %s", oai_identifier, summary)
-            report.add_failure(oai_identifier, summary)
-        elif _entry.filtered:
-            current_app.logger.info("Entry %s: skipped", oai_identifier)
-            report.add_ok()
-        else:
-            current_app.logger.info("Entry %s: processed successfully", oai_identifier)
-            report.add_ok()
-
-
-def parse_config(config: str) -> tuple[str, dict]:
-    """Parse a config string of the form type{args}."""
-    # the config is a single line, like xml{props}
-    # props are json5 style key-value pairs
-    # the result is {"type": "oai-import", "args": {"model": "test"}}
-    if "{" not in config:
-        return config, {}
-    type_, args_str = config.split("{", 1)
-    args_str = "{" + args_str
-
-    args = cast("dict", json5.loads(args_str))
-    return type_, args
-
-
-def create_readers(
-    harvester: OAIHarvesterAggregate,
-    since: datetime | str | None = None,
-    oai_ids: list[str] | None = None,
-) -> dict:
-    """Create readers config for the harvester."""
-    reader_type, reader_args = parse_config(harvester.loader or "oai-pmh")
-    if "base_url" not in reader_args:
-        reader_args["base_url"] = harvester.base_url
-    if "metadata_prefix" not in reader_args and harvester.metadata_prefix:
-        reader_args["metadata_prefix"] = harvester.metadata_prefix
-    if "set" not in reader_args and harvester.setspec:
-        reader_args["set"] = harvester.setspec
-    if "from_date" not in reader_args and since:
-        if isinstance(since, datetime | str):
-            since = format_oaipmh_datestamp(since, reader_args["base_url"])
-        reader_args["from_date"] = since
-    if oai_ids is not None:
-        reader_args["identifiers"] = oai_ids
-    reader_args["harvester_id"] = harvester.id
-    return {
-        "type": reader_type,
-        "args": reader_args,
-    }
-
-
-def create_transformers(harvester: OAIHarvesterAggregate) -> list[dict]:
-    """Create transformers config for the harvester."""
-    transformers = []
-    for transformer_config in harvester.transformers or []:
-        transformer_type, transformer_args = parse_config(transformer_config)
-        transformer_args["harvester_id"] = harvester.id
-        transformers.append(
-            {
-                "type": transformer_type,
-                "args": transformer_args,
-            }
-        )
-    return transformers
-
-
-def create_writers(harvester: OAIHarvesterAggregate) -> list[dict]:
-    """Create writers config for the harvester."""
-    writers = []
-    for writer_config in harvester.writers or []:
-        writer_type, writer_args = parse_config(writer_config)
-        writer_args["harvester_id"] = harvester.id
-        writers.append(
-            {
-                "type": writer_type,
-                "args": writer_args,
-            }
-        )
-    return writers
 
 
 @shared_task(ignore_result=True)
