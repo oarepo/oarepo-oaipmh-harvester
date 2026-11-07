@@ -73,35 +73,10 @@ class OARepoOAIHarvesterExt:
             app.config["VOCABULARIES_DATASTREAM_WRITERS"] = {**vocabularies_config.VOCABULARIES_DATASTREAM_WRITERS}
         app.config["VOCABULARIES_DATASTREAM_WRITERS"].update(harvester_config.VOCABULARIES_DATASTREAM_WRITERS)
 
-        app.config.setdefault(
-            "OAI_HARVESTER_DEFAULT_BATCH_SIZE",
-            harvester_config.OAI_HARVESTER_DEFAULT_BATCH_SIZE,
-        )
-
-        app.config.setdefault(
-            "OAI_HARVESTER_SORT_OPTIONS",
-            harvester_config.OAI_HARVESTER_SORT_OPTIONS,
-        )
-        app.config.setdefault(
-            "OAI_HARVESTER_SEARCH",
-            harvester_config.OAI_HARVESTER_SEARCH,
-        )
-        app.config.setdefault(
-            "OAI_HARVESTER_FACETS",
-            harvester_config.OAI_HARVESTER_FACETS,
-        )
-        app.config.setdefault(
-            "OAI_RECORD_SORT_OPTIONS",
-            harvester_config.OAI_RECORD_SORT_OPTIONS,
-        )
-        app.config.setdefault(
-            "OAI_RECORD_SEARCH",
-            harvester_config.OAI_RECORD_SEARCH,
-        )
-        app.config.setdefault(
-            "OAI_RECORD_FACETS",
-            harvester_config.OAI_RECORD_FACETS,
-        )
+        for key in dir(harvester_config):
+            # the datastream registries above are merged with invenio's, not defaulted
+            if key.isupper() and not key.startswith("VOCABULARIES_DATASTREAM_"):
+                app.config.setdefault(key, getattr(harvester_config, key))
 
     @cached_property
     def oai_record_service_config(self) -> OAIRecordServiceConfig:

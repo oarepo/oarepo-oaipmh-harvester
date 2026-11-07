@@ -352,3 +352,106 @@ def communities(app, db, search_clear, users):
         return ids
 
     return _create
+
+
+@pytest.fixture
+def source(mocker):
+    """Serve a fake OAI-PMH source, the one the `harvester` harvests from, to the real httpx client."""
+    import httpx
+    from fake_oai_source import FakeOAIPMHSource
+    from oaipmh_scythe import Scythe
+
+    from oarepo_oaipmh_harvester.oai_source import _granularity
+
+    fake = FakeOAIPMHSource()
+    transport = httpx.MockTransport(fake.handle)
+    # scythe creates a client per instance (and again after the reader closes it)
+    mocker.patch.object(
+        Scythe, "client", new_callable=mocker.PropertyMock, side_effect=lambda: httpx.Client(transport=transport)
+    )
+    # the granularity is cached per url for the process; every test's source has its own
+    _granularity.cache_clear()
+    return fake
+
+
+@pytest.fixture
+def harvested(test_model):
+    """Return the titles of the harvested local records (the fake source titles them by identifier)."""
+    from oarepo_runtime import current_runtime
+
+    def _harvested() -> set[str]:
+        service = current_runtime.models["test"].service
+        service.indexer.refresh()
+        hits = service.search(system_identity, params={"size": 1000}).to_dict()["hits"]["hits"]
+        return {hit["metadata"]["title"]["value"] for hit in hits}
+
+    return _harvested
+
+
+@pytest.fixture
+def outbox(app):
+    """Mails sent during the test."""
+    with app.extensions["mail"].record_messages() as messages:
+        yield messages
+
+
+@pytest.fixture
+def harvest_manager(harvester, users):
+    """`users[0]`, made the harvest manager of the `harvester`."""
+    current_oai_harvester_service.update(
+        system_identity,
+        harvester,
+        {
+            **current_oai_harvester_service.read(system_identity, harvester).to_dict(),
+            "harvest_managers": [{"user": str(users[0].id)}],
+        },
+    )
+    return users[0]
+
+
+@pytest.fixture
+def harvester_job(app, db, harvester):
+    """Create the invenio-jobs job of the `harvester`."""
+    from invenio_jobs.models import Job
+    from invenio_jobs.services.schema import RunSchema
+
+    from oarepo_oaipmh_harvester.jobs import get_oaipmh_job_id, register_oaipmh_job
+
+    register_oaipmh_job(harvester)
+    # the nested arguments schema of a run is cached on the class-level field and snapshots
+    # the job types registered at that time - drop it so that the job type above is known
+    RunSchema._declared_fields["args"]._schema = None
+    job = Job(title="Harvest", task=get_oaipmh_job_id(harvester), default_queue="celery")
+    db.session.add(job)
+    db.session.commit()
+    return job
+
+
+@pytest.fixture
+def harvest_record():
+    """Return the stored harvest record (`OAIHarvestedRecord`) of an OAI identifier."""
+    from invenio_db import db as _db
+
+    from oarepo_oaipmh_harvester.oai_record.models import OAIHarvestedRecord
+
+    def _harvest_record(identifier: str) -> OAIHarvestedRecord:
+        return _db.session.query(OAIHarvestedRecord).filter_by(oai_identifier=identifier).one()
+
+    return _harvest_record
+
+
+@pytest.fixture
+def oai_entry():
+    """Build the stream entry the transformers hand to a writer; `record=None` - deleted at the source."""
+    import datetime as dt
+    from types import SimpleNamespace
+
+    from invenio_vocabularies.datastreams.datastreams import StreamEntry
+
+    def _oai_entry(identifier: str, day: int, record: dict | None) -> StreamEntry:
+        header = SimpleNamespace(
+            identifier=identifier, datestamp=dt.datetime(2025, 1, day, tzinfo=dt.UTC), deleted=record is None
+        )
+        return StreamEntry({"oai_record": SimpleNamespace(header=header, raw="<record/>"), "record": record})
+
+    return _oai_entry

@@ -20,14 +20,30 @@ from datetime import datetime
 from typing import Any, override
 
 from invenio_db import db
-from invenio_jobs.jobs import JobType
+from invenio_jobs.jobs import JobType, PredefinedArgsSchema
 from invenio_jobs.models import Job
 from invenio_jobs.proxies import current_jobs
+from marshmallow import fields
 from sqlalchemy import select
 
 from oarepo_oaipmh_harvester.oai_harvester.models import OAIHarvester
 
 from .tasks import harvest_oaipmh_records
+
+
+class OAIHarvestJobArgsSchema(PredefinedArgsSchema):
+    """Run arguments of a harvester job."""
+
+    job_arg_schema = fields.String(
+        metadata={"type": "hidden"},
+        dump_default="OAIHarvestJobArgsSchema",
+        load_default="OAIHarvestJobArgsSchema",
+    )
+    parallel = fields.Boolean(
+        load_default=False,
+        metadata={"description": "Harvest all records, split into time windows harvested in parallel."},
+    )
+    oai_ids = fields.List(fields.String(), load_default=None, allow_none=True)
 
 
 class OAIHarvestJob(JobType):
@@ -54,6 +70,9 @@ class OAIHarvestJob(JobType):
 
     task = harvest_oaipmh_records
 
+    arguments_schema = OAIHarvestJobArgsSchema
+    """Run arguments of the job - `parallel` and `oai_ids` show in the run form."""
+
     @classmethod
     @override
     def build_task_arguments(
@@ -63,15 +82,23 @@ class OAIHarvestJob(JobType):
         **kwargs: Any,
     ) -> dict:
         """Build task arguments for the job."""
+        if "from" in kwargs:
+            # a subtask run of a parallel harvest keeps just its window - it is never executed,
+            # the window task is dispatched directly, and the report names failed windows by it
+            return {"from": kwargs["from"], "until": kwargs["until"]}
         if since and isinstance(since, datetime):
             # keep full ISO here; create_readers formats it to the
             # OAI-PMH datestamp granularity advertised by the target server
             since = since.isoformat()
+        oai_ids = kwargs.get("oai_ids")
+        if isinstance(oai_ids, str):
+            # runs created before the arguments schema hold the identifiers comma separated
+            oai_ids = oai_ids.split(",")
         return {
             "harvester_id": cls.id.replace("harvest_oaipmh_records_", ""),
             "since": since,
-            # run params keep the identifiers comma separated (see the `harvest --use-job` command)
-            "oai_ids": oai_ids.split(",") if (oai_ids := kwargs.get("oai_ids")) else None,
+            "oai_ids": oai_ids or None,
+            "parallel": bool(kwargs.get("parallel")),
         }
 
 

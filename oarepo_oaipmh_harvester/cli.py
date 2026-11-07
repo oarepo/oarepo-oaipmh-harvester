@@ -306,24 +306,43 @@ def delete_harvester(harvester_id: str, yes: bool) -> None:
 @click.argument("identifiers", required=False, nargs=-1)
 @click.option("--since", help="Harvest records modified since this date (ISO format)")
 @click.option("--use-job", is_flag=True, help="Use job to perform harvesting")
+@click.option(
+    "--parallel",
+    is_flag=True,
+    help="Harvest everything in parallel time windows (implies --use-job, needs a job for the harvester)",
+)
 @with_appcontext
 def harvest_harvester(
     harvester_id: str,
     since: str | None,
     use_job: bool = False,
+    parallel: bool = False,
     identifiers: tuple[str, ...] = (),
 ) -> None:
     """Trigger harvesting for an OAI-PMH harvester."""
+    if parallel and (since or identifiers):
+        raise click.UsageError("--parallel harvests everything, it can not be combined with --since or identifiers")
+    use_job = use_job or parallel
     if use_job:
-        job = get_oaipmh_job(harvester_id)
-        current_runs_service.create(
+        try:
+            job = get_oaipmh_job(harvester_id)
+        except LookupError as e:
+            raise click.ClickException(str(e)) from e
+        run = current_runs_service.create(
             system_identity,
             job.id,
-            params={
-                "since": since,
-                "oai_ids": ",".join(identifiers) if identifiers else None,
+            {
+                "args": {
+                    "job_arg_schema": "OAIHarvestJobArgsSchema",
+                    # the run arguments accept only a full ISO datetime - parse it as the
+                    # direct harvest below does, so that e.g. `--since 2025-01-01` works too
+                    "since": arrow.get(since).isoformat() if since else None,
+                    "oai_ids": list(identifiers) or None,
+                    "parallel": parallel,
+                }
             },
         )
+        click.echo(f"Started job run {run.id}")
     else:
         from oarepo_oaipmh_harvester.tasks import harvest_oaipmh_records
 

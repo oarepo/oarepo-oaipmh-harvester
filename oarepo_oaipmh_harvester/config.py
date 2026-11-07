@@ -28,6 +28,24 @@ VOCABULARIES_DATASTREAM_WRITERS = {
 # higher memory consumption without any performance benefit.
 OAI_HARVESTER_DEFAULT_BATCH_SIZE = 1
 
+OAI_HARVESTER_PARALLEL_TARGET_SIZE = 20000
+"""Desired number of records in one window of a parallel harvest."""
+
+OAI_HARVESTER_PARALLEL_FIXED_WINDOW = "1d"
+"""Window length used when the source does not report how many records a window has."""
+
+OAI_HARVESTER_PARALLEL_MAX_WINDOWS = 2000
+"""A parallel harvest never creates more windows than this."""
+
+OAI_HARVESTER_WINDOW_QUEUE: str | None = "low"
+"""Celery queue for the window tasks of a parallel harvest; `None` is the default queue.
+
+`low` is the low priority queue of invenio-jobs (`JOBS_QUEUES`), consumed by the workers of
+the repositories. The concurrency of the workers consuming it is the number of windows
+harvested at the same time - set a dedicated queue to control that independently of other
+low priority work.
+"""
+
 OAI_HARVESTER_SORT_OPTIONS: dict[str, Any] = {
     "newest": {
         "title": _("Newest"),

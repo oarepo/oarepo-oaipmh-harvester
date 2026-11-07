@@ -68,3 +68,5 @@ def test_build_task_arguments_splits_oai_ids():
     args = OAIHarvestJob.build_task_arguments(None, oai_ids="oai:a:1,oai:a:2")
     assert args["oai_ids"] == ["oai:a:1", "oai:a:2"]
     assert OAIHarvestJob.build_task_arguments(None)["oai_ids"] is None
+    # the run arguments schema passes the identifiers as a list (the `harvest --use-job` command)
+    assert OAIHarvestJob.build_task_arguments(None, oai_ids=["oai:a:1"])["oai_ids"] == ["oai:a:1"]

@@ -132,8 +132,8 @@ def _flatten_messages(messages: Any, field: str = "") -> Generator[tuple[str, st
         yield field, str(messages) or "Unknown error (no message)"
 
 
-def _short_error(error: dict) -> str:
-    """One-line, truncated description of a stored error for the log."""
+def short_error(error: dict) -> str:
+    """One-line, truncated description of a stored error for the log and the report."""
     location = error.get("location") if error.get("type") == "validation_error" else None
     text = " ".join(
         f"{error.get('type', 'error')}: {f'{location}: ' if location else ''}{error.get('message', '')}".split()
@@ -308,6 +308,7 @@ class OAIServiceWriter(BaseWriter):
         publish: bool = True,
         direct_update: bool = False,
         community: str | None = None,
+        sync_index: bool = True,
         **kwargs: Any,
     ):
         """Initialize the OAI service writer.
@@ -325,6 +326,10 @@ class OAIServiceWriter(BaseWriter):
                 records (drafts services do not by default).
             community: Slug (or id) of a community every written record is added to. Only
                 for rdm models.
+            sync_index: Index the harvest record right away. Set to `False` for bulk
+                indexing: the harvest record is queued and indexed by celery beat, which is
+                much faster for large harvests but leaves the administration of the harvest
+                records behind until the queue is processed.
 
         """
         self._model = model
@@ -335,6 +340,7 @@ class OAIServiceWriter(BaseWriter):
         self._publish = publish
         self._direct_update = direct_update
         self._community = community
+        self._sync_index = sync_index
 
         super().__init__(
             *args,
@@ -449,7 +455,7 @@ class OAIServiceWriter(BaseWriter):
                 "OAI identifier %s: %s error(s) stored on the harvest record: %s",
                 oai_identifier,
                 len(stored_errors),
-                "; ".join(_short_error(error) for error in stored_errors),
+                "; ".join(short_error(error) for error in stored_errors),
             )
         if exception_raised is not None and stream_entry.exc is None:
             # report the failure to the datastream as well, not only on the oai record
@@ -700,6 +706,9 @@ class OAIServiceWriter(BaseWriter):
 
         # indexed right away - the bulk queue is processed only by a running celery beat,
         # so the administration would show the state of a previous harvest until then
+        if not self._sync_index:
+            current_oai_record_service.indexer.bulk_index([oai_record.oai_identifier])
+            return errors
         try:
             indexer = current_oai_record_service.indexer
             indexer.index(OAIRecordAggregate.from_model(oai_record))

@@ -436,3 +436,81 @@ harvest logs the record as failed.
 
 There are no warnings - a record is either written or fails. If a problem should not
 prevent the import, fix the data in the transformer (and log it) instead.
+
+## Parallel harvest of a large source
+
+An initial harvest of a big source (hundreds of thousands of records and more) takes a
+long time sequentially. Started as a **job run with `parallel=True`**, the harvest is split
+into time windows that are harvested at the same time:
+
+```bash
+invenio oai harvest zenodo --parallel            # implies --use-job
+```
+
+or check *parallel* in the run form of the harvester's job in *Administration → Jobs*.
+
+The run harvests **everything** - `since` and selected identifiers are rejected - between
+the source's `earliestDatestamp` and now. The
+[planner][oarepo_oaipmh_harvester.planning.WindowPlanner] asks the source how many records
+the range has (`completeListSize`) and then **halves the windows by time**: a window with
+more than `OAI_HARVESTER_PARALLEL_TARGET_SIZE` records is split in two (both halves are
+probed) until every window is small enough, so a burst of records - a mass import, say -
+ends up in a small window instead of making one window much slower than all the others. A
+window is not split below the granularity of the source (a day on a `YYYY-MM-DD` source)
+and windows without records are dropped. When the source does not report the number of
+records, windows of `OAI_HARVESTER_PARALLEL_FIXED_WINDOW` length are used instead.
+
+Every window is a **subtask run of the job run**, so *Administration → Jobs* shows the
+progress (subtasks completed, entries inserted / updated / errored). The report mail is
+sent once, when the last window finishes; if a window failed, the mail names its range
+and the records of that range were not harvested.
+
+The window tasks write with `oai-service{sync_index:false}` - the harvest records are
+queued for bulk indexing (processed by the celery beat that runs the indexer queues)
+instead of being indexed one by one, which is much faster for a large harvest. Until the
+queue is processed, the administration of the harvest records lags behind.
+
+The windows go to the `low` queue (`OAI_HARVESTER_WINDOW_QUEUE`) - the low priority queue
+of invenio-jobs, which the workers of the repositories consume. The concurrency of the
+workers consuming it is the number of windows harvested at the same time, shared with the
+other low priority tasks: while a large harvest runs, its windows (minutes to hours each)
+occupy those worker processes. Run the workers with `-O fair` so that a process busy with a
+window does not reserve further windows ahead:
+
+```bash
+celery -A invenio_app.celery worker -Q celery,low -O fair
+```
+
+To control the harvest's concurrency independently (and so the load on the source), use a
+dedicated queue and a worker for it:
+
+```python
+OAI_HARVESTER_WINDOW_QUEUE = "oai-harvest"
+```
+
+```bash
+celery -A invenio_app.celery worker -Q oai-harvest -O fair -c 8
+```
+
+Keep the database pool (`SQLALCHEMY_ENGINE_OPTIONS`) large enough for the workers. With
+`OAI_HARVESTER_WINDOW_QUEUE = None` the windows go to the default queue.
+
+The windows need a cache **shared by all the workers** (`CACHE_TYPE = RedisCache`, what
+invenio-app-rdm configures): the stop of a run is remembered in it and the report mail is
+claimed with it. With a per-process cache (e.g. `SimpleCache`) every worker that sees the
+finished run sends its own report and a *Stop* does not reach the other workers.
+
+Notes:
+
+- the *Run* action of the harvester in the administration (and the REST API start) always
+  harvests sequentially - it starts the Celery task directly, without a job run;
+- stopping the run stops only the windows that have not started yet - windows already
+  running finish normally; when the last window finishes the run becomes `CANCELLED` and
+  the report says it was stopped. A run stopped before its windows were created (while it
+  is still waiting or planning) does not start at all; it ends `PARTIAL_SUCCESS` with the
+  message "The run was stopped before the harvest started" - invenio-jobs offers no way
+  for the task to end its run `CANCELLED`;
+- a record modified at the source during the harvest can move to a later window and be
+  written twice; the concurrent write fails, the error is stored on its harvest record and
+  the next harvest fixes it;
+- the source sees the concurrency of all harvesters that share the queue.
